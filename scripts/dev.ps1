@@ -2,7 +2,32 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 
 Set-Location -LiteralPath $root
-docker compose --env-file .env.example -f infra/docker-compose.yml up -d
+$envFile = Join-Path $root '.env'
+if (-not (Test-Path -LiteralPath $envFile -PathType Leaf)) {
+    $envFile = Join-Path $root '.env.example'
+}
+
+$lineNumber = 0
+foreach ($line in [System.IO.File]::ReadLines($envFile)) {
+    $lineNumber++
+    $entry = $line.Trim()
+    if (-not $entry -or $entry.StartsWith('#')) {
+        continue
+    }
+    if ($entry -notmatch '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+        throw "Invalid env entry at ${envFile}:$lineNumber"
+    }
+
+    $name = $Matches[1]
+    $value = $Matches[2].Trim()
+    if (($value.StartsWith('"') -and $value.EndsWith('"')) -or
+        ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+        $value = $value.Substring(1, $value.Length - 2)
+    }
+    [System.Environment]::SetEnvironmentVariable($name, $value, 'Process')
+}
+
+docker compose --env-file $envFile -f infra/docker-compose.yml up -d
 
 $shell = if ($PSVersionTable.PSEdition -eq 'Core') {
     Join-Path $PSHOME 'pwsh.exe'

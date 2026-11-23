@@ -11,6 +11,22 @@ CloudHub is a local multi-cloud file portal. Sprint 0 provides the monorepo, dat
 
 ## Start locally
 
+Create `.env` from `.env.example` and fill in any local settings before starting.
+
+PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Linux, macOS, or Bash:
+
+```bash
+cp .env.example .env
+```
+
+The dev scripts load `.env` into the backend process. If `.env` is absent, they use `.env.example`. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env` to enable Google Drive OAuth; keep those secrets out of frontend variables.
+
 PowerShell:
 
 ```powershell
