@@ -12,8 +12,8 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http) {
         http
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/health", "/actuator/health").permitAll()
-                .anyRequest().denyAll())
+                .requestMatchers("/api/health", "/actuator/health", "/api/auth/**", "/api/oauth/**").permitAll()
+                .anyRequest().permitAll())
             .csrf(csrf -> csrf.disable());
         return http.build();
     }
