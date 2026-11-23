@@ -11,9 +11,16 @@ CloudHub is a local multi-cloud file portal. Sprint 0 provides the monorepo, dat
 
 ## Start locally
 
+PowerShell:
+
 ```powershell
-Copy-Item .env.example .env
 .\scripts\dev.ps1
+```
+
+Linux, macOS, or Bash:
+
+```bash
+bash scripts/dev.sh
 ```
 
 Services:
