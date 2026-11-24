@@ -6,6 +6,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
@@ -133,7 +134,8 @@ public class GoogleDriveProvider implements CloudProvider {
             String mime = file.path("mimeType").asText("");
             boolean folder = "application/vnd.google-apps.folder".equals(mime);
             boolean shortcut = "application/vnd.google-apps.shortcut".equals(mime);
-            boolean nativeDoc = mime.startsWith("application/vnd.google-apps.");
+            boolean nativeDoc = mime.startsWith("application/vnd.google-apps.")
+                && !folder && !shortcut;
             String parentId = file.path("parents").isArray() && file.path("parents").size() > 0
                 ? file.path("parents").get(0).asText() : null;
             String shortcutTarget = shortcut
@@ -167,6 +169,158 @@ public class GoogleDriveProvider implements CloudProvider {
         return send(request);
     }
 
+    @Override
+    public FileItem getMetadata(String accessToken, String fileId, String accountId) {
+        String fields = "id,name,mimeType,size,modifiedTime,parents,shortcutDetails";
+        JsonNode file = getJson(
+            "https://www.googleapis.com/drive/v3/files/" + encodePath(fileId)
+                + "?fields=" + encode(fields),
+            accessToken
+        );
+        return mapFile(file, accountId);
+    }
+
+    @Override
+    public DownloadStream download(String accessToken, String fileId) {
+        FileItem metadata = getMetadata(accessToken, fileId, "");
+        String mimeType = metadata.mimeType();
+        String filename = metadata.name();
+        String url;
+
+        if (metadata.nativeDoc()) {
+            String exportMime = switch (mimeType) {
+                case "application/vnd.google-apps.spreadsheet" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                case "application/vnd.google-apps.presentation" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+                default -> "application/pdf";
+            };
+            url = "https://www.googleapis.com/drive/v3/files/" + encodePath(fileId)
+                + "/export?mimeType=" + encode(exportMime);
+            mimeType = exportMime;
+            filename = exportFilename(filename, exportMime);
+        } else {
+            url = "https://www.googleapis.com/drive/v3/files/" + encodePath(fileId) + "?alt=media";
+        }
+
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+            .header("Authorization", "Bearer " + accessToken)
+            .header("Accept", "*/*")
+            .GET().build();
+        try {
+            HttpResponse<InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() >= 400) {
+                throw new GoogleApiException(response.statusCode(), "Google Drive download failed");
+            }
+            long size = response.headers().firstValueAsLong("Content-Length").orElse(metadata.size() == null ? -1 : metadata.size());
+            return new DownloadStream(response.body(), size, mimeType, filename);
+        } catch (GoogleApiException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot download file from Google Drive", exception);
+        }
+    }
+
+    @Override
+    public FileItem upload(
+        String accessToken,
+        String parentId,
+        String name,
+        String mimeType,
+        InputStream data,
+        long size,
+        String accountId
+    ) {
+        String parent = parentId == null || parentId.isBlank() ? "root" : parentId;
+        String safeName = name == null || name.isBlank() ? "Untitled" : name;
+        String safeMimeType = mimeType == null || mimeType.isBlank()
+            ? "application/octet-stream" : mimeType;
+        HttpRequest.BodyPublisher uploadBody = uploadBody(data, size);
+        try {
+            String metadataJson = mapper.writeValueAsString(
+                java.util.Map.of("name", safeName, "parents", List.of(parent), "mimeType", safeMimeType)
+            );
+            HttpRequest initiate = HttpRequest.newBuilder(
+                    URI.create("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,mimeType,size,modifiedTime,parents"))
+                .header("Authorization", "Bearer " + accessToken)
+                .header("Content-Type", "application/json; charset=UTF-8")
+                .header("X-Upload-Content-Type", safeMimeType)
+                .header("X-Upload-Content-Length", Long.toString(size))
+                .POST(HttpRequest.BodyPublishers.ofString(metadataJson))
+                .build();
+            HttpResponse<Void> initiated = http.send(initiate, HttpResponse.BodyHandlers.discarding());
+            if (initiated.statusCode() >= 400) {
+                throw new GoogleApiException(initiated.statusCode(), "Google Drive upload could not be started");
+            }
+            String location = initiated.headers().firstValue("Location")
+                .orElseThrow(() -> new IllegalStateException("Google Drive did not return a resumable upload URL"));
+
+            HttpRequest upload = HttpRequest.newBuilder(URI.create(location))
+                .header("Authorization", "Bearer " + accessToken)
+                .header("Content-Type", safeMimeType)
+                .PUT(uploadBody)
+                .build();
+            HttpResponse<String> uploaded = http.send(upload, HttpResponse.BodyHandlers.ofString());
+            if (uploaded.statusCode() >= 400) {
+                throw new GoogleApiException(uploaded.statusCode(), "Google Drive upload failed");
+            }
+            JsonNode file = mapper.readTree(uploaded.body());
+            return mapFile(file, accountId);
+        } catch (GoogleApiException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot upload file to Google Drive", exception);
+        }
+    }
+
+    static HttpRequest.BodyPublisher uploadBody(InputStream data, long size) {
+        if (size < 0) throw new IllegalArgumentException("File size cannot be negative");
+        if (size == 0) return HttpRequest.BodyPublishers.noBody();
+        return HttpRequest.BodyPublishers.fromPublisher(
+            HttpRequest.BodyPublishers.ofInputStream(() -> data),
+            size
+        );
+    }
+
+    private FileItem mapFile(JsonNode file, String accountId) {
+        String mime = file.path("mimeType").asText("");
+        boolean folder = "application/vnd.google-apps.folder".equals(mime);
+        boolean shortcut = "application/vnd.google-apps.shortcut".equals(mime);
+        boolean nativeDoc = mime.startsWith("application/vnd.google-apps.")
+            && !folder && !shortcut;
+        String parentId = file.path("parents").isArray() && file.path("parents").size() > 0
+            ? file.path("parents").get(0).asText() : null;
+        String shortcutTarget = shortcut
+            ? file.path("shortcutDetails").path("targetId").asText(null) : null;
+        Instant modified = file.has("modifiedTime") && !file.get("modifiedTime").isNull()
+            ? Instant.parse(file.get("modifiedTime").asText()) : null;
+        Long size = file.has("size") && !file.get("size").isNull()
+            ? file.get("size").asLong() : null;
+        return new FileItem(
+            file.get("id").asText(),
+            accountId,
+            ProviderType.GOOGLE,
+            file.path("name").asText("Untitled"),
+            folder ? "FOLDER" : "FILE",
+            mime,
+            size,
+            modified,
+            parentId,
+            shortcut,
+            shortcutTarget,
+            nativeDoc
+        );
+    }
+
+    private static String encodePath(String value) {
+        return value.replace("/", "%2F");
+    }
+
+    private static String exportFilename(String name, String exportMime) {
+        String base = name.replaceAll("\\.[^.]+$", "");
+        if (exportMime.endsWith(".sheet")) return base + ".xlsx";
+        if (exportMime.endsWith(".presentation")) return base + ".pptx";
+        return base + ".pdf";
+    }
+
     private JsonNode postForm(String url, String body) {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
             .header("Content-Type", "application/x-www-form-urlencoded")
@@ -180,9 +334,11 @@ public class GoogleDriveProvider implements CloudProvider {
         try {
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 400) {
-                throw new IllegalStateException("Google API error " + response.statusCode());
+                throw new GoogleApiException(response.statusCode(), "Google API error " + response.statusCode());
             }
             return mapper.readTree(response.body());
+        } catch (GoogleApiException exception) {
+            throw exception;
         } catch (Exception exception) {
             throw new IllegalStateException("Cannot call Google API", exception);
         }

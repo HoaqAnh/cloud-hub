@@ -52,15 +52,15 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 ### Sprint 0 — Nền móng (3–5 ngày, không tính là sprint đầy đủ)
 **Sprint Goal:** Một lệnh dựng được môi trường; đã xác nhận OAuth khả thi.
 
-- [ ] Khởi tạo monorepo, cấu trúc thư mục, `.editorconfig`, `.env.example`.
-- [ ] Docker Compose cho PostgreSQL; Flyway migration đầu tiên.
-- [ ] Skeleton backend (Spring Boot) + endpoint health check.
-- [ ] Skeleton frontend (Vite + React + TS + Tailwind + shadcn/ui), gọi được health check qua proxy.
-- [ ] Sinh OpenAPI → TypeScript client (hoặc quyết định tạm viết tay).
-- [ ] Lint/format/test chạy được cả hai phía.
-- [ ] **Spike OAuth:** tạo app OAuth cho Google trước (Dropbox, OneDrive tạo sớm nhất có thể); thử redirect `localhost`; ghi lại scope tối thiểu, loại tài khoản hỗ trợ, thời hạn refresh token ở chế độ test.
-- [ ] Chốt các quyết định mở trong `project_tech_stack.md` (mục 9), ghi ADR ngắn.
-- [ ] Tạo backlog ban đầu và board Scrum.
+- [x] Khởi tạo monorepo, cấu trúc thư mục, `.editorconfig`, `.env.example`.
+- [x] Docker Compose cho PostgreSQL; Flyway migration đầu tiên.
+- [x] Skeleton backend (Spring Boot) + endpoint health check.
+- [x] Skeleton frontend (Vite + React + TS + Tailwind + shadcn/ui), gọi được health check qua proxy.
+- [x] Sinh OpenAPI → TypeScript client (hoặc quyết định tạm viết tay).
+- [x] Lint/format/test chạy được cả hai phía.
+- [x] **Spike OAuth:** tạo app OAuth cho Google trước (Dropbox, OneDrive tạo sớm nhất có thể); thử redirect `localhost`; ghi lại scope tối thiểu, loại tài khoản hỗ trợ, thời hạn refresh token ở chế độ test.
+- [x] Chốt các quyết định mở trong `project_tech_stack.md` (mục 9), ghi ADR ngắn.
+- [x] Tạo backlog ban đầu và board Scrum.
 
 **Kết quả:** `docker compose up` + chạy backend/frontend → thấy trang trống kết nối được backend.
 
@@ -69,14 +69,14 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 ### Sprint 1 — ★ DEMO 1: "Đăng nhập, kết nối Google Drive, xem file"
 **Sprint Goal:** Tôi đăng nhập portal, kết nối Google Drive và thấy danh sách file ở thư mục gốc.
 
-- [ ] Đăng nhập/đăng xuất local (một người dùng, mật khẩu băm bcrypt/argon2; thông tin khởi tạo từ biến môi trường hoặc seed).
-- [ ] Layout ứng dụng (sidebar, header), trang Login, route được bảo vệ.
-- [ ] Thiết kế `CloudProvider` interface + model thống nhất `FileItem`, `AccountInfo`, `Capabilities`.
-- [ ] OAuth 2.0 Google: `state` + PKCE, callback, lưu token **mã hóa** vào DB.
-- [ ] `GoogleDriveProvider`: lấy thông tin tài khoản, liệt kê thư mục gốc.
-- [ ] Trang Dashboard: danh sách tài khoản + trạng thái kết nối.
-- [ ] Trang Explorer tối giản: liệt kê file gốc (list view).
-- [ ] Tự động refresh access token.
+- [x] Đăng nhập/đăng xuất local (một người dùng, mật khẩu băm bcrypt/argon2; thông tin khởi tạo từ biến môi trường hoặc seed).
+- [x] Layout ứng dụng (sidebar, header), trang Login, route được bảo vệ.
+- [x] Thiết kế `CloudProvider` interface + model thống nhất `FileItem`, `AccountInfo`, `Capabilities`.
+- [x] OAuth 2.0 Google: `state` + PKCE, callback, lưu token **mã hóa** vào DB.
+- [x] `GoogleDriveProvider`: lấy thông tin tài khoản, liệt kê thư mục gốc.
+- [x] Trang Dashboard: danh sách tài khoản + trạng thái kết nối.
+- [x] Trang Explorer tối giản: liệt kê file gốc (list view).
+- [x] Tự động refresh access token.
 
 **Kịch bản demo:** Login → Connect Google Drive → thấy tài khoản trên Dashboard → mở Explorer thấy file thật.
 
@@ -85,12 +85,12 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 ### Sprint 2 — ★ DEMO 2: "Duyệt đầy đủ, tải xuống, tải lên"
 **Sprint Goal:** Tôi duyệt cây thư mục Drive thoải mái, tải file xuống và tải file lên.
 
-- [ ] Điều hướng thư mục, breadcrumb, phân trang/tải thêm (page token); xử lý shortcut (hiển thị + phân giải sang đích).
-- [ ] Xác minh còn thiếu cho Drive: phân trang, upload resumable (điền ⏳ trong capability matrix).
-- [ ] Grid view và list view; hiển thị metadata cơ bản.
-- [ ] Download: backend stream qua proxy (không buffer toàn bộ file vào RAM); xử lý file Google Docs/Sheets (export sang PDF/Office).
-- [ ] Upload: giao diện chọn file + thanh tiến trình; upload resumable cho file lớn.
-- [ ] Xử lý lỗi cơ bản: 401 (hết hạn), 403, 404, 429 (rate limit), mất mạng.
+- [x] Điều hướng thư mục, breadcrumb, phân trang/tải thêm (page token); xử lý shortcut (hiển thị + phân giải sang đích).
+- [x] Xác minh còn thiếu cho Drive: phân trang, upload resumable (cập nhật capability matrix).
+- [x] Grid view và list view; hiển thị metadata cơ bản.
+- [x] Download: backend stream qua proxy (không buffer toàn bộ file vào RAM); xử lý file Google Docs/Sheets (export sang PDF/Office).
+- [x] Upload: giao diện chọn file + thanh tiến trình; upload resumable cho Drive.
+- [x] Xử lý lỗi cơ bản: 401 (hết hạn), 403, 404, 429 (rate limit), mất mạng.
 
 **Kịch bản demo:** Vào thư mục lồng nhau → tải một file PDF → tải lên một ảnh → thấy nó xuất hiện.
 

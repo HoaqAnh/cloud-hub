@@ -85,10 +85,10 @@ Ký hiệu: ✅ đã xác minh · ⚠️ cần kiểm thử thực tế · ⏳ c
 |---|---|---|---|
 | Cách định danh file | ✅ ID: `files/{fileId}` | ✅ Path (`/folder/file`) hoặc ID (`id:...`) | ✅ ID (`/drive/items/{item-id}`) hoặc path (`/drive/root:/path/to/file`) |
 | **ID dùng trong portal (quyết định)** | ID gốc | `id:...` (path chỉ để hiển thị/breadcrumb) | ID (path chỉ để hiển thị/breadcrumb) |
-| Phân trang | ⏳ `pageToken` (S1) | ⏳ `cursor` (S4) | ⏳ `@odata.nextLink` (S5) |
+| Phân trang | ✅ `pageToken` (S2) | ⏳ `cursor` (S4) | ⏳ `@odata.nextLink` (S5) |
 | Tìm kiếm theo tên phía server | ⏳ (S3) | ⏳ (S4) | ⏳ (S5) |
 | Quota | ⏳ (S3) | ⏳ (S4) | ⏳ (S5) |
-| Upload file lớn (session/resumable) | ⏳ (S2) | ⏳ upload session (S4) | ⏳ upload session (S5) |
+| Upload file lớn (session/resumable) | ✅ resumable upload (S2) | ⏳ upload session (S4) | ⏳ upload session (S5) |
 | Xóa → thùng rác | ✅ `files.update(trashed=true)` | ✅ `files/delete_v2` (khôi phục bằng `files/restore`) | ✅ `DELETE /items/{id}` (vào Recycle Bin) |
 | Xóa vĩnh viễn | ✅ `files.delete` | ✅ `files/permanently_delete`, **chỉ gói Business/Enterprise** → không dùng | ⚠️ `POST /drives/{drive-id}/items/{item-id}/permanentDelete`: tài liệu liệt kê hỗ trợ tài khoản cá nhân, nhưng có trả lời trên Microsoft Q&A cho rằng đây là lỗi tài liệu và API chỉ áp dụng cho OneDrive for Business/SharePoint (S5: thử thực tế) |
 | Thumbnail | ✅ `thumbnailLink` (ngắn hạn) | ✅ `files/get_thumbnail_v2` | ✅ `/items/{id}/thumbnails` |

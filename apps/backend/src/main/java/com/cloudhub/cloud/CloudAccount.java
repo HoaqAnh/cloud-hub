@@ -91,4 +91,9 @@ public class CloudAccount {
         this.status = "ACTIVE";
         this.updatedAt = Instant.now();
     }
+
+    public void setStatus(String status) {
+        this.status = status;
+        this.updatedAt = Instant.now();
+    }
 }
