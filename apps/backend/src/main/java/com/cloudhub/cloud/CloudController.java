@@ -23,6 +23,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -72,16 +73,54 @@ public class CloudController {
         @PathVariable UUID accountId,
         @RequestParam(required = false) String folderId,
         @RequestParam(required = false) String pageToken,
+        @RequestParam(required = false, defaultValue = "all") String type,
+        @RequestParam(required = false, defaultValue = "name") String sort,
         HttpSession session
     ) {
         User user = currentUser(session);
         CloudAccount account = ownedAccount(accountId, user);
         String accessToken = ensureAccessToken(account);
-        Page<FileItem> page = google.listRoot(accessToken, folderId, pageToken, accountId.toString());
+        Page<FileItem> page = google.listRoot(
+            accessToken, folderId, pageToken, accountId.toString(), type, sort
+        );
         return Map.of(
             "items", page.items(),
             "nextPageToken", page.nextPageToken() == null ? "" : page.nextPageToken()
         );
+    }
+
+    @GetMapping("/search")
+    @Transactional
+    public Map<String, Object> searchFiles(
+        @RequestParam String q,
+        @RequestParam(required = false) String accountId,
+        @RequestParam(required = false) String folderId,
+        @RequestParam(required = false) String pageToken,
+        @RequestParam(required = false, defaultValue = "all") String type,
+        @RequestParam(required = false, defaultValue = "name") String sort,
+        HttpSession session
+    ) {
+        User user = currentUser(session);
+        UUID id = UUID.fromString(accountId);
+        CloudAccount account = ownedAccount(id, user);
+        Page<FileItem> page = google.search(
+            ensureAccessToken(account), q, folderId, pageToken, id.toString(), type, sort
+        );
+        return Map.of(
+            "items", page.items(),
+            "nextPageToken", page.nextPageToken() == null ? "" : page.nextPageToken()
+        );
+    }
+
+    @GetMapping("/accounts/{accountId}/quota")
+    @Transactional
+    public com.cloudhub.provider.StorageQuota getQuota(
+        @PathVariable UUID accountId,
+        HttpSession session
+    ) {
+        User user = currentUser(session);
+        CloudAccount account = ownedAccount(accountId, user);
+        return google.getQuota(ensureAccessToken(account));
     }
 
     @GetMapping("/accounts/{accountId}/files/{fileId}")
@@ -148,13 +187,86 @@ public class CloudController {
         );
     }
 
+    @GetMapping("/accounts/{accountId}/files/{fileId}/thumbnail")
+    @Transactional
+    public ResponseEntity<StreamingResponseBody> thumbnail(
+        @PathVariable UUID accountId,
+        @PathVariable String fileId,
+        HttpSession session
+    ) {
+        User user = currentUser(session);
+        CloudAccount account = ownedAccount(accountId, user);
+        DownloadStream download = google.thumbnail(ensureAccessToken(account), fileId);
+        StreamingResponseBody body = output -> {
+            try (java.io.InputStream input = download.input()) {
+                input.transferTo(output);
+            }
+        };
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType(download.mimeType()));
+        headers.set("X-Content-Type-Options", "nosniff");
+        headers.setCacheControl("private, max-age=300");
+        if (download.size() >= 0) headers.setContentLength(download.size());
+        return ResponseEntity.ok().headers(headers).body(body);
+    }
+
+    @PostMapping("/accounts/{accountId}/folders")
+    @Transactional
+    public FileItem createFolder(
+        @PathVariable UUID accountId,
+        @RequestParam(required = false) String parentId,
+        @RequestParam String name,
+        HttpSession session
+    ) {
+        User user = currentUser(session);
+        CloudAccount account = ownedAccount(accountId, user);
+        return google.createFolder(
+            ensureAccessToken(account), parentId, name, accountId.toString()
+        );
+    }
+
+    @PatchMapping("/accounts/{accountId}/files/{fileId}")
+    @Transactional
+    public FileItem renameFile(
+        @PathVariable UUID accountId,
+        @PathVariable String fileId,
+        @RequestParam String name,
+        HttpSession session
+    ) {
+        User user = currentUser(session);
+        CloudAccount account = ownedAccount(accountId, user);
+        return google.rename(ensureAccessToken(account), fileId, name, accountId.toString());
+    }
+
+    @DeleteMapping("/accounts/{accountId}/files/{fileId}")
+    @Transactional
+    public Map<String, Boolean> trashFile(
+        @PathVariable UUID accountId,
+        @PathVariable String fileId,
+        HttpSession session
+    ) {
+        User user = currentUser(session);
+        CloudAccount account = ownedAccount(accountId, user);
+        google.trash(ensureAccessToken(account), fileId);
+        return Map.of("trashed", true);
+    }
+
     @DeleteMapping("/accounts/{accountId}")
+    @Transactional
     public Map<String, Boolean> disconnect(
         @PathVariable UUID accountId,
         HttpSession session
     ) {
         User user = currentUser(session);
-        accounts.delete(ownedAccount(accountId, user));
+        CloudAccount account = ownedAccount(accountId, user);
+        if (account.getRefreshTokenEnc() != null) {
+            try {
+                google.revoke(cipher.decrypt(account.getRefreshTokenEnc()));
+            } catch (Exception exception) {
+                account.setStatus("NEEDS_MANUAL_REVOKE");
+            }
+        }
+        accounts.delete(account);
         return Map.of("disconnected", true);
     }
 

@@ -99,6 +99,17 @@ public class GoogleDriveProvider implements CloudProvider {
         return tokenSet(json);
     }
 
+    @Override
+    public void revoke(String refreshToken) {
+        requireConfigured();
+        String body = "token=" + encode(refreshToken);
+        HttpRequest request = HttpRequest.newBuilder(URI.create("https://oauth2.googleapis.com/revoke"))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build();
+        send(request);
+    }
+
     private TokenSet tokenSet(JsonNode json) {
         if (!json.has("access_token")) throw new IllegalStateException("Google returned no access token");
         long expiresIn = json.has("expires_in") ? json.get("expires_in").asLong() : 3600;
@@ -118,46 +129,73 @@ public class GoogleDriveProvider implements CloudProvider {
     }
 
     @Override
-    public Page<FileItem> listRoot(String accessToken, String folderId, String pageToken, String accountId) {
+    public StorageQuota getQuota(String accessToken) {
+        JsonNode json = getJson(
+            "https://www.googleapis.com/drive/v3/about?fields=storageQuota",
+            accessToken
+        ).path("storageQuota");
+        return new StorageQuota(
+            json.path("limit").asLong(0),
+            json.path("usage").asLong(0),
+            json.path("usageInDrive").asLong(0),
+            json.path("usageInTrash").asLong(0)
+        );
+    }
+
+    @Override
+    public Page<FileItem> listRoot(
+        String accessToken,
+        String folderId,
+        String pageToken,
+        String accountId,
+        String type,
+        String sort
+    ) {
         String parent = folderId == null || folderId.isBlank() ? "root" : folderId;
         String q = "'" + parent.replace("'", "\\'") + "' in parents and trashed=false";
-        String fields = "nextPageToken,files(id,name,mimeType,size,modifiedTime,parents,shortcutDetails)";
+        q = addTypeFilter(q, type);
+        String fields = "nextPageToken,files(id,name,mimeType,size,modifiedTime,parents,shortcutDetails,thumbnailLink)";
         String url = "https://www.googleapis.com/drive/v3/files?q=" + encode(q)
             + "&fields=" + encode(fields)
             + "&pageSize=100"
-            + "&orderBy=folder,name";
+            + "&orderBy=" + encodeOrder(sort);
         if (pageToken != null && !pageToken.isBlank()) url += "&pageToken=" + encode(pageToken);
 
         JsonNode json = getJson(url, accessToken);
         List<FileItem> items = new ArrayList<>();
         for (JsonNode file : json.path("files")) {
-            String mime = file.path("mimeType").asText("");
-            boolean folder = "application/vnd.google-apps.folder".equals(mime);
-            boolean shortcut = "application/vnd.google-apps.shortcut".equals(mime);
-            boolean nativeDoc = mime.startsWith("application/vnd.google-apps.")
-                && !folder && !shortcut;
-            String parentId = file.path("parents").isArray() && file.path("parents").size() > 0
-                ? file.path("parents").get(0).asText() : null;
-            String shortcutTarget = shortcut
-                ? file.path("shortcutDetails").path("targetId").asText(null) : null;
-            Instant modified = file.has("modifiedTime")
-                ? Instant.parse(file.get("modifiedTime").asText()) : null;
-            Long size = file.has("size") ? file.get("size").asLong() : null;
-            items.add(new FileItem(
-                file.get("id").asText(),
-                accountId,
-                ProviderType.GOOGLE,
-                file.path("name").asText("Untitled"),
-                folder ? "FOLDER" : "FILE",
-                mime,
-                size,
-                modified,
-                parentId,
-                shortcut,
-                shortcutTarget,
-                nativeDoc
-            ));
+            items.add(mapFile(file, accountId));
         }
+        return new Page<>(items, json.path("nextPageToken").asText(null));
+    }
+
+    @Override
+    public Page<FileItem> search(
+        String accessToken,
+        String query,
+        String folderId,
+        String pageToken,
+        String accountId,
+        String type,
+        String sort
+    ) {
+        String q = "trashed=false";
+        if (query != null && !query.isBlank()) {
+            q += " and name contains '" + query.replace("'", "\\'") + "'";
+        }
+        if (folderId != null && !folderId.isBlank()) {
+            q += " and '" + folderId.replace("'", "\\'") + "' in parents";
+        }
+        q = addTypeFilter(q, type);
+        String fields = "nextPageToken,files(id,name,mimeType,size,modifiedTime,parents,shortcutDetails,thumbnailLink)";
+        String url = "https://www.googleapis.com/drive/v3/files?q=" + encode(q)
+            + "&fields=" + encode(fields)
+            + "&pageSize=100"
+            + "&orderBy=" + encodeOrder(sort);
+        if (pageToken != null && !pageToken.isBlank()) url += "&pageToken=" + encode(pageToken);
+        JsonNode json = getJson(url, accessToken);
+        List<FileItem> items = new ArrayList<>();
+        for (JsonNode file : json.path("files")) items.add(mapFile(file, accountId));
         return new Page<>(items, json.path("nextPageToken").asText(null));
     }
 
@@ -171,7 +209,7 @@ public class GoogleDriveProvider implements CloudProvider {
 
     @Override
     public FileItem getMetadata(String accessToken, String fileId, String accountId) {
-        String fields = "id,name,mimeType,size,modifiedTime,parents,shortcutDetails";
+        String fields = "id,name,mimeType,size,modifiedTime,parents,shortcutDetails,thumbnailLink";
         JsonNode file = getJson(
             "https://www.googleapis.com/drive/v3/files/" + encodePath(fileId)
                 + "?fields=" + encode(fields),
@@ -216,6 +254,34 @@ public class GoogleDriveProvider implements CloudProvider {
             throw exception;
         } catch (Exception exception) {
             throw new IllegalStateException("Cannot download file from Google Drive", exception);
+        }
+    }
+
+    @Override
+    public DownloadStream thumbnail(String accessToken, String fileId) {
+        JsonNode file = getJson(
+            "https://www.googleapis.com/drive/v3/files/" + encodePath(fileId)
+                + "?fields=id,name,mimeType,thumbnailLink",
+            accessToken
+        );
+        String link = file.path("thumbnailLink").asText("");
+        if (link.isBlank()) throw new IllegalStateException("Thumbnail is not available");
+        HttpRequest request = HttpRequest.newBuilder(URI.create(link))
+            .header("Authorization", "Bearer " + accessToken)
+            .GET()
+            .build();
+        try {
+            HttpResponse<InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() >= 400) {
+                throw new GoogleApiException(response.statusCode(), "Google Drive thumbnail failed");
+            }
+            String mime = response.headers().firstValue("Content-Type").orElse("application/octet-stream");
+            long size = response.headers().firstValueAsLong("Content-Length").orElse(-1);
+            return new DownloadStream(response.body(), size, mime, file.path("name").asText("thumbnail"));
+        } catch (GoogleApiException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot download thumbnail from Google Drive", exception);
         }
     }
 
@@ -271,6 +337,77 @@ public class GoogleDriveProvider implements CloudProvider {
         }
     }
 
+    @Override
+    public FileItem createFolder(String accessToken, String parentId, String name, String accountId) {
+        String parent = parentId == null || parentId.isBlank() ? "root" : parentId;
+        String safeName = name == null || name.isBlank() ? "Untitled" : name;
+        try {
+            String metadataJson = mapper.writeValueAsString(
+                java.util.Map.of("name", safeName, "parents", List.of(parent),
+                    "mimeType", "application/vnd.google-apps.folder")
+            );
+            HttpRequest request = HttpRequest.newBuilder(
+                    URI.create("https://www.googleapis.com/drive/v3/files?fields=id,name,mimeType,size,modifiedTime,parents,shortcutDetails,thumbnailLink"))
+                .header("Authorization", "Bearer " + accessToken)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(metadataJson))
+                .build();
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 400) {
+                throw new GoogleApiException(response.statusCode(), "Could not create folder");
+            }
+            return mapFile(mapper.readTree(response.body()), accountId);
+        } catch (GoogleApiException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot create folder in Google Drive", exception);
+        }
+    }
+
+    @Override
+    public FileItem rename(String accessToken, String fileId, String newName, String accountId) {
+        String safeName = newName == null || newName.isBlank() ? "Untitled" : newName;
+        try {
+            String body = mapper.writeValueAsString(java.util.Map.of("name", safeName));
+            HttpRequest request = HttpRequest.newBuilder(
+                    URI.create("https://www.googleapis.com/drive/v3/files/" + encodePath(fileId)
+                        + "?fields=id,name,mimeType,size,modifiedTime,parents,shortcutDetails,thumbnailLink"))
+                .header("Authorization", "Bearer " + accessToken)
+                .header("Content-Type", "application/json")
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(body))
+                .build();
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 400) {
+                throw new GoogleApiException(response.statusCode(), "Could not rename file");
+            }
+            return mapFile(mapper.readTree(response.body()), accountId);
+        } catch (GoogleApiException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot rename file in Google Drive", exception);
+        }
+    }
+
+    @Override
+    public void trash(String accessToken, String fileId) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder(
+                    URI.create("https://www.googleapis.com/drive/v3/files/" + encodePath(fileId)))
+                .header("Authorization", "Bearer " + accessToken)
+                .header("Content-Type", "application/json")
+                .method("PATCH", HttpRequest.BodyPublishers.ofString("{\"trashed\":true}"))
+                .build();
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 400) {
+                throw new GoogleApiException(response.statusCode(), "Could not move file to trash");
+            }
+        } catch (GoogleApiException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot trash file in Google Drive", exception);
+        }
+    }
+
     static HttpRequest.BodyPublisher uploadBody(InputStream data, long size) {
         if (size < 0) throw new IllegalArgumentException("File size cannot be negative");
         if (size == 0) return HttpRequest.BodyPublishers.noBody();
@@ -286,6 +423,9 @@ public class GoogleDriveProvider implements CloudProvider {
         boolean shortcut = "application/vnd.google-apps.shortcut".equals(mime);
         boolean nativeDoc = mime.startsWith("application/vnd.google-apps.")
             && !folder && !shortcut;
+        boolean previewable = mime.startsWith("image/")
+            || "application/pdf".equals(mime);
+        String thumbnailUrl = file.path("thumbnailLink").asText("");
         String parentId = file.path("parents").isArray() && file.path("parents").size() > 0
             ? file.path("parents").get(0).asText() : null;
         String shortcutTarget = shortcut
@@ -306,8 +446,33 @@ public class GoogleDriveProvider implements CloudProvider {
             parentId,
             shortcut,
             shortcutTarget,
-            nativeDoc
+            nativeDoc,
+            thumbnailUrl.isBlank() ? null : thumbnailUrl,
+            previewable
         );
+    }
+
+    private static String addTypeFilter(String query, String type) {
+        if (type == null || type.isBlank() || "all".equalsIgnoreCase(type)) return query;
+        return switch (type.toLowerCase(Locale.ROOT)) {
+            case "folder" -> query + " and mimeType='application/vnd.google-apps.folder'";
+            case "image" -> query + " and mimeType contains 'image/'";
+            case "pdf" -> query + " and mimeType='application/pdf'";
+            case "file" -> query + " and mimeType!='application/vnd.google-apps.folder'";
+            default -> query;
+        };
+    }
+
+    private static String encodeOrder(String sort) {
+        if (sort == null) return "folder,name";
+        return switch (sort) {
+            case "name-desc" -> "folder,name desc";
+            case "size" -> "folder,quotaBytesUsed";
+            case "size-desc" -> "folder,quotaBytesUsed desc";
+            case "modified" -> "folder,modifiedTime";
+            case "modified-desc" -> "folder,modifiedTime desc";
+            default -> "folder,name";
+        };
     }
 
     private static String encodePath(String value) {
@@ -336,6 +501,7 @@ public class GoogleDriveProvider implements CloudProvider {
             if (response.statusCode() >= 400) {
                 throw new GoogleApiException(response.statusCode(), "Google API error " + response.statusCode());
             }
+            if (response.body().isBlank()) return mapper.getNodeFactory().nullNode();
             return mapper.readTree(response.body());
         } catch (GoogleApiException exception) {
             throw exception;

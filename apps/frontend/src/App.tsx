@@ -3,14 +3,16 @@ import type { FormEvent } from 'react'
 import {
   ChevronRight,
   Cloud,
-  Download,
   Folder,
   Grid2X2,
   HardDrive,
   Link2,
   List,
   LogOut,
+  Pencil,
+  Plus,
   RefreshCw,
+  Trash2,
   Upload,
 } from 'lucide-react'
 import { Button } from './components/ui/button'
@@ -33,8 +35,11 @@ type FileItem = {
   shortcut: boolean
   shortcutTargetId: string | null
   nativeDoc: boolean
+  thumbnailUrl: string | null
+  previewable: boolean
 }
 type Breadcrumb = { id?: string; name: string }
+type StorageQuota = { limit: number; usage: number; usageInDrive: number; usageInTrash: number }
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -80,6 +85,10 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [fileType, setFileType] = useState('all')
+  const [sort, setSort] = useState('name')
+  const [quota, setQuota] = useState<Record<string, StorageQuota>>({})
   const fileInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -98,6 +107,14 @@ export default function App() {
       const value = await api<Account[]>('/api/accounts')
       setAccounts(value)
       setSelectedAccount((current) => current ?? (value.length ? value[0].id : null))
+      await Promise.all(value.map(async (account) => {
+        try {
+          const value = await api<StorageQuota>(`/api/accounts/${account.id}/quota`)
+          setQuota((current) => ({ ...current, [account.id]: value }))
+        } catch {
+          // Keep the account visible; quota is provider-specific and optional.
+        }
+      }))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not load accounts')
     }
@@ -107,6 +124,13 @@ export default function App() {
     // oxlint-disable-next-line react/set-state-in-effect
     if (auth?.authenticated) loadAccounts()
   }, [auth?.authenticated, loadAccounts])
+
+  useEffect(() => {
+    if (selectedAccount && route === 'explorer') {
+      if (searchQuery.trim()) runSearch()
+      else loadFiles(selectedAccount, folderId)
+    }
+  }, [fileType, sort])
 
   async function loadFiles(
     accountId: string,
@@ -120,6 +144,8 @@ export default function App() {
       const query = new URLSearchParams()
       if (parentId) query.set('folderId', parentId)
       if (pageToken) query.set('pageToken', pageToken)
+      query.set('type', fileType)
+      query.set('sort', sort)
       const value = await api<{ items: FileItem[]; nextPageToken: string }>(
         `/api/accounts/${accountId}/files${query.size ? `?${query}` : ''}`)
       setFiles((current) => append ? [...current, ...value.items] : value.items)
@@ -127,6 +153,35 @@ export default function App() {
       setFolderId(parentId)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not load files')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function runSearch(pageToken = '', append = false) {
+    if (!selectedAccount) return
+    if (!searchQuery.trim()) {
+      await loadFiles(selectedAccount, folderId)
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      const query = new URLSearchParams({
+        q: searchQuery.trim(),
+        accountId: selectedAccount,
+        type: fileType,
+        sort,
+      })
+      if (folderId) query.set('folderId', folderId)
+      if (pageToken) query.set('pageToken', pageToken)
+      const value = await api<{ items: FileItem[]; nextPageToken: string }>(
+        `/api/search?${query}`
+      )
+      setFiles((current) => append ? [...current, ...value.items] : value.items)
+      setNextPageToken(value.nextPageToken)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Search failed')
     } finally {
       setLoading(false)
     }
@@ -175,7 +230,7 @@ export default function App() {
       return
     }
     if (file.type !== 'FOLDER') {
-      downloadFile(file)
+      previewFile(file)
       return
     }
     setBreadcrumbs((current) => [...current, { id: file.id, name: file.name }])
@@ -212,6 +267,70 @@ export default function App() {
     if (!selectedAccount) return
     const url = `/api/accounts/${selectedAccount}/files/${encodeURIComponent(file.id)}/content`
     window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  function previewFile(file: FileItem) {
+    if (!selectedAccount) return
+    if (file.previewable) {
+      const url = `/api/accounts/${selectedAccount}/files/${encodeURIComponent(file.id)}/content?disposition=inline`
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } else {
+      downloadFile(file)
+    }
+  }
+
+  async function createFolder() {
+    if (!selectedAccount) return
+    const name = window.prompt('Folder name')
+    if (!name?.trim()) return
+    try {
+      const query = new URLSearchParams({ name: name.trim() })
+      if (folderId) query.set('parentId', folderId)
+      await api<FileItem>(`/api/accounts/${selectedAccount}/folders?${query}`, { method: 'POST' })
+      await loadFiles(selectedAccount, folderId)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not create folder')
+    }
+  }
+
+  async function renameFile(file: FileItem) {
+    if (!selectedAccount) return
+    const name = window.prompt('New name', file.name)
+    if (!name?.trim() || name.trim() === file.name) return
+    try {
+      await api<FileItem>(
+        `/api/accounts/${selectedAccount}/files/${encodeURIComponent(file.id)}?name=${encodeURIComponent(name.trim())}`,
+        { method: 'PATCH' }
+      )
+      await loadFiles(selectedAccount, folderId)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not rename item')
+    }
+  }
+
+  async function trashFile(file: FileItem) {
+    if (!selectedAccount) return
+    if (!window.confirm(`Move "${file.name}" to Google Drive trash?`)) return
+    try {
+      await api<{ trashed: boolean }>(
+        `/api/accounts/${selectedAccount}/files/${encodeURIComponent(file.id)}`,
+        { method: 'DELETE' }
+      )
+      await loadFiles(selectedAccount, folderId)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not move item to trash')
+    }
+  }
+
+  async function disconnectAccount(accountId: string) {
+    if (!window.confirm('Disconnect this Google account and delete its local tokens?')) return
+    try {
+      await api<{ disconnected: boolean }>(`/api/accounts/${accountId}`, { method: 'DELETE' })
+      await loadAccounts()
+      setSelectedAccount(null)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not disconnect account')
+    }
   }
 
   function uploadFile() {
@@ -305,15 +424,24 @@ export default function App() {
             {error && <p className="mt-6 rounded-lg border border-rose-900 bg-rose-950/30 p-3 text-sm text-rose-300">{error}</p>}
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
               {accounts.map((account) => (
-                <button key={account.id} onClick={() => {
-                  setSelectedAccount(account.id)
-                  setBreadcrumbs([{ name: 'My Drive' }])
-                  navigate('explorer')
-                  loadFiles(account.id)
-                }} className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-left hover:border-cyan-700">
-                  <div className="flex items-start justify-between"><div className="grid h-10 w-10 place-items-center rounded-lg bg-cyan-500/10 text-cyan-400"><HardDrive /></div><span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-400">{account.status}</span></div>
-                  <h2 className="mt-4 font-medium">{account.displayName}</h2><p className="mt-1 text-sm text-slate-400">{account.email || 'Google account'}</p>
-                </button>
+                <div key={account.id} className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+                  <button onClick={() => {
+                    setSelectedAccount(account.id)
+                    setBreadcrumbs([{ name: 'My Drive' }])
+                    navigate('explorer')
+                    loadFiles(account.id)
+                  }} className="w-full text-left">
+                    <div className="flex items-start justify-between"><div className="grid h-10 w-10 place-items-center rounded-lg bg-cyan-500/10 text-cyan-400"><HardDrive /></div><span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-400">{account.status}</span></div>
+                    <h2 className="mt-4 font-medium">{account.displayName}</h2><p className="mt-1 text-sm text-slate-400">{account.email || 'Google account'}</p>
+                    {quota[account.id] && (
+                      <div className="mt-4">
+                        <div className="mb-2 flex justify-between text-xs text-slate-400"><span>Drive storage</span><span>{formatSize(quota[account.id].usage)} / {quota[account.id].limit > 0 ? formatSize(quota[account.id].limit) : 'unlimited'}</span></div>
+                        <div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full bg-cyan-500" style={{ width: `${quota[account.id].limit > 0 ? Math.min(100, quota[account.id].usage / quota[account.id].limit * 100) : 0}%` }} /></div>
+                      </div>
+                    )}
+                  </button>
+                  <Button variant="ghost" className="mt-4 w-full text-rose-400" onClick={() => disconnectAccount(account.id)}><Trash2 className="h-4 w-4" />Disconnect</Button>
+                </div>
               ))}
               {!accounts.length && <div className="col-span-full rounded-xl border border-dashed border-slate-700 p-10 text-center text-slate-400">No cloud accounts connected yet.</div>}
             </div>
@@ -330,6 +458,7 @@ export default function App() {
                     className="hidden"
                     onChange={(event) => handleUpload(event.target.files?.[0])}
                   />
+                  <Button onClick={createFolder}><Plus className="h-4 w-4" />New folder</Button>
                   <Button onClick={uploadFile} disabled={uploading}><Upload className="h-4 w-4" />Upload</Button>
                   <Button onClick={() => selectedAccount && loadFiles(selectedAccount, folderId)}><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh</Button>
                 </div>
@@ -340,6 +469,31 @@ export default function App() {
               setBreadcrumbs([{ name: 'My Drive' }])
               loadFiles(event.target.value)
             }} className="mt-6 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2">{accounts.map(account => <option key={account.id} value={account.id}>{account.displayName}</option>)}</select>}
+
+            <div className="mt-6 flex gap-2">
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Enter') runSearch() }}
+                placeholder="Search Drive by name"
+                className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-cyan-500"
+              />
+              <select value={fileType} onChange={(event) => { setFileType(event.target.value); }} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm">
+                <option value="all">All types</option>
+                <option value="folder">Folders</option>
+                <option value="image">Images</option>
+                <option value="pdf">PDF</option>
+                <option value="file">Files</option>
+              </select>
+              <select value={sort} onChange={(event) => setSort(event.target.value)} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm">
+                <option value="name">Name A-Z</option>
+                <option value="name-desc">Name Z-A</option>
+                <option value="size">Size small</option>
+                <option value="size-desc">Size large</option>
+                <option value="modified">Modified old</option>
+                <option value="modified-desc">Modified new</option>
+              </select>
+            </div>
 
             <div className="mt-6 flex items-center justify-between">
               <nav className="flex items-center gap-1 text-sm">
@@ -366,19 +520,21 @@ export default function App() {
 
             {view === 'list' ? (
               <div className="mt-4 overflow-hidden rounded-xl border border-slate-800">
-                <div className="grid grid-cols-[1fr_180px_140px_52px] border-b border-slate-800 bg-slate-900 px-4 py-3 text-xs uppercase tracking-wider text-slate-500"><span>Name</span><span>Modified</span><span>Size</span><span /></div>
+                <div className="grid grid-cols-[1fr_180px_140px_104px] border-b border-slate-800 bg-slate-900 px-4 py-3 text-xs uppercase tracking-wider text-slate-500"><span>Name</span><span>Modified</span><span>Size</span><span /></div>
                 {loading && <p className="p-8 text-center text-slate-400">Loading files...</p>}
                 {!loading && files.map(file => (
-                  <button key={file.id} onClick={() => enterFolder(file)} className="grid w-full grid-cols-[1fr_180px_140px_52px] items-center border-b border-slate-800 px-4 py-3 text-left text-sm last:border-0 hover:bg-slate-900">
-                    <span className="flex items-center gap-3">
+                  <div key={file.id} className="grid w-full grid-cols-[1fr_180px_140px_104px] items-center border-b border-slate-800 px-4 py-3 text-sm last:border-0 hover:bg-slate-900">
+                    <button onClick={() => enterFolder(file)} className="flex items-center gap-3 text-left">
                       {file.shortcut ? <Link2 className="h-5 w-5 text-violet-400" /> : file.type === 'FOLDER' ? <Folder className="h-5 w-5 text-cyan-400" /> : <HardDrive className="h-5 w-5 text-slate-400" />}
                       <span className="truncate">{file.name}{file.nativeDoc ? ' (Google Doc)' : ''}</span>
-                    </span>
+                    </button>
                     <span className="text-slate-400">{file.modifiedAt ? new Date(file.modifiedAt).toLocaleString() : '-'}</span>
                     <span className="text-slate-400">{formatSize(file.size)}</span>
-                    {file.type === 'FILE' && <Download className="h-4 w-4 text-slate-500" />}
-                    {file.type === 'FOLDER' && <span />}
-                  </button>
+                    <span className="flex justify-end gap-1">
+                      <button onClick={() => renameFile(file)} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-cyan-300" aria-label={`Rename ${file.name}`}><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => trashFile(file)} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-rose-400" aria-label={`Trash ${file.name}`}><Trash2 className="h-4 w-4" /></button>
+                    </span>
+                  </div>
                 ))}
                 {!loading && !files.length && <p className="p-8 text-center text-slate-400">{selectedAccount ? 'This folder is empty.' : 'Connect Google Drive to browse files.'}</p>}
               </div>
@@ -386,19 +542,34 @@ export default function App() {
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {loading && <p className="col-span-full p-8 text-center text-slate-400">Loading files...</p>}
                 {!loading && files.map(file => (
-                  <button key={file.id} onClick={() => enterFolder(file)} className="min-h-36 rounded-xl border border-slate-800 bg-slate-900 p-4 text-left hover:border-cyan-700">
-                    <div className="flex items-center justify-between">
-                      {file.shortcut ? <Link2 className="h-8 w-8 text-violet-400" /> : file.type === 'FOLDER' ? <Folder className="h-8 w-8 text-cyan-400" /> : <HardDrive className="h-8 w-8 text-slate-400" />}
-                      {file.type === 'FILE' && <Download className="h-4 w-4 text-slate-500" />}
+                  <div key={file.id} className="min-h-36 rounded-xl border border-slate-800 bg-slate-900 p-4 hover:border-cyan-700">
+                    <button onClick={() => enterFolder(file)} className="w-full text-left">
+                      <div className="flex h-20 items-center justify-center overflow-hidden rounded-lg bg-slate-950">
+                        {file.thumbnailUrl && selectedAccount
+                          ? <img
+                              src={`/api/accounts/${selectedAccount}/files/${encodeURIComponent(file.id)}/thumbnail`}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          : file.shortcut
+                            ? <Link2 className="h-8 w-8 text-violet-400" />
+                            : file.type === 'FOLDER'
+                              ? <Folder className="h-8 w-8 text-cyan-400" />
+                              : <HardDrive className="h-8 w-8 text-slate-400" />}
+                      </div>
+                      <p className="mt-3 truncate text-sm font-medium">{file.name}</p>
+                      <p className="mt-2 text-xs text-slate-500">{formatSize(file.size)} · {file.modifiedAt ? new Date(file.modifiedAt).toLocaleDateString() : '-'}</p>
+                    </button>
+                    <div className="mt-2 flex justify-end gap-1">
+                      <button onClick={() => renameFile(file)} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-cyan-300" aria-label={`Rename ${file.name}`}><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => trashFile(file)} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-rose-400" aria-label={`Trash ${file.name}`}><Trash2 className="h-4 w-4" /></button>
                     </div>
-                    <p className="mt-4 truncate text-sm font-medium">{file.name}</p>
-                    <p className="mt-2 text-xs text-slate-500">{formatSize(file.size)} · {file.modifiedAt ? new Date(file.modifiedAt).toLocaleDateString() : '-'}</p>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
             {nextPageToken && (
-              <Button className="mt-4 w-full" onClick={() => selectedAccount && loadFiles(selectedAccount, folderId, nextPageToken, true)} disabled={loading}>
+              <Button className="mt-4 w-full" onClick={() => searchQuery.trim() ? runSearch(nextPageToken, true) : selectedAccount && loadFiles(selectedAccount, folderId, nextPageToken, true)} disabled={loading}>
                 {loading ? 'Loading...' : 'Load more'}
               </Button>
             )}

@@ -25,6 +25,14 @@ class GoogleDriveProviderTest {
     }
 
     @Test
+    void exposesSprint3DriveCapabilities() {
+        Capabilities capabilities = provider.capabilities();
+
+        assertTrue(capabilities.search());
+        assertTrue(capabilities.quota());
+    }
+
+    @Test
     void createsPkceChallengeForVerifier() {
         assertEquals(
             "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",

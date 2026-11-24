@@ -15,5 +15,7 @@ public record FileItem(
     String parentId,
     boolean shortcut,
     String shortcutTargetId,
-    boolean nativeDoc
+    boolean nativeDoc,
+    String thumbnailUrl,
+    boolean previewable
 ) {}
