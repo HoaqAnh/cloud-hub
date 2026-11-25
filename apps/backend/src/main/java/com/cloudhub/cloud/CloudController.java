@@ -15,6 +15,7 @@ import com.cloudhub.auth.UserRepository;
 import com.cloudhub.provider.FileItem;
 import com.cloudhub.provider.GoogleDriveProvider;
 import com.cloudhub.provider.DropboxProvider;
+import com.cloudhub.provider.OneDriveProvider;
 import com.cloudhub.provider.CloudProvider;
 import com.cloudhub.provider.ProviderType;
 import com.cloudhub.provider.Page;
@@ -35,6 +36,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.multipart.MultipartFile;
 import com.cloudhub.provider.DownloadStream;
+import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api")
@@ -43,6 +47,7 @@ public class CloudController {
     private final UserRepository users;
     private final GoogleDriveProvider google;
     private final DropboxProvider dropbox;
+    private final OneDriveProvider onedrive;
     private final TokenCipher cipher;
 
     public CloudController(
@@ -51,7 +56,7 @@ public class CloudController {
         GoogleDriveProvider google,
         TokenCipher cipher
     ) {
-        this(accounts, users, google, null, cipher);
+        this(accounts, users, google, null, null, cipher);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -60,12 +65,14 @@ public class CloudController {
         UserRepository users,
         GoogleDriveProvider google,
         DropboxProvider dropbox,
+        OneDriveProvider onedrive,
         TokenCipher cipher
     ) {
         this.accounts = accounts;
         this.users = users;
         this.google = google;
         this.dropbox = dropbox;
+        this.onedrive = onedrive;
         this.cipher = cipher;
     }
 
@@ -77,7 +84,11 @@ public class CloudController {
                 "id", account.getId().toString(),
                 "provider", account.getProvider().name(),
                 "displayName", account.getDisplayName() == null
-                    ? (account.getProvider() == ProviderType.DROPBOX ? "Dropbox" : "Google Drive")
+                    ? switch (account.getProvider()) {
+                        case ONEDRIVE -> "OneDrive";
+                        case DROPBOX -> "Dropbox";
+                        case GOOGLE -> "Google Drive";
+                    }
                     : account.getDisplayName(),
                 "email", account.getEmail() == null ? "" : account.getEmail(),
                 "status", account.getStatus(),
@@ -113,6 +124,7 @@ public class CloudController {
     public Map<String, Object> searchFiles(
         @RequestParam String q,
         @RequestParam(required = false) String accountId,
+        @RequestParam(required = false) String providers,
         @RequestParam(required = false) String folderId,
         @RequestParam(required = false) String pageToken,
         @RequestParam(required = false, defaultValue = "all") String type,
@@ -120,15 +132,65 @@ public class CloudController {
         HttpSession session
     ) {
         User user = currentUser(session);
-        UUID id = UUID.fromString(accountId);
-        CloudAccount account = ownedAccount(id, user);
-        Page<FileItem> page = provider(account).search(
-            ensureAccessToken(account), q, folderId, pageToken, id.toString(), type, sort
-        );
-        return Map.of(
-            "items", page.items(),
-            "nextPageToken", page.nextPageToken() == null ? "" : page.nextPageToken()
-        );
+        if (accountId != null && !accountId.isBlank()) {
+            UUID id = UUID.fromString(accountId);
+            CloudAccount account = ownedAccount(id, user);
+            Page<FileItem> page = provider(account).search(
+                ensureAccessToken(account), q, folderId, pageToken, id.toString(), type, sort
+            );
+            return Map.of(
+                "items", page.items(),
+                "nextPageToken", page.nextPageToken() == null ? "" : page.nextPageToken()
+            );
+        }
+
+        List<CloudAccount> selected = accounts.findByUserId(user.getId()).stream()
+            .filter(account -> providers == null || providers.isBlank()
+                || containsProvider(providers, account.getProvider()))
+            .filter(account -> account.getStatus().equals("ACTIVE"))
+            .toList();
+
+        List<CompletableFuture<Map<String, Object>>> searches = new ArrayList<>();
+        for (CloudAccount account : selected) {
+            searches.add(CompletableFuture.supplyAsync(() -> {
+                try {
+                    Page<FileItem> page = provider(account).search(
+                        ensureAccessToken(account), q, folderId, pageToken,
+                        account.getId().toString(), type, sort
+                    );
+                    return Map.<String, Object>of(
+                        "accountId", account.getId().toString(),
+                        "accountName", account.getDisplayName() == null ? account.getProvider().name() : account.getDisplayName(),
+                        "provider", account.getProvider().name(),
+                        "status", "ok",
+                        "items", page.items(),
+                        "nextPageToken", page.nextPageToken() == null ? "" : page.nextPageToken()
+                    );
+                } catch (Exception exception) {
+                    String message = exception.getMessage() == null ? "Provider search failed" : exception.getMessage();
+                    return Map.<String, Object>of(
+                        "accountId", account.getId().toString(),
+                        "accountName", account.getDisplayName() == null ? account.getProvider().name() : account.getDisplayName(),
+                        "provider", account.getProvider().name(),
+                        "status", "error",
+                        "items", List.of(),
+                        "error", message
+                    );
+                }
+            }).completeOnTimeout(Map.of(
+                "accountId", account.getId().toString(),
+                "accountName", account.getDisplayName() == null ? account.getProvider().name() : account.getDisplayName(),
+                "provider", account.getProvider().name(),
+                "status", "error",
+                "items", List.of(),
+                "error", "Provider search timed out"
+            ), 10, TimeUnit.SECONDS));
+        }
+
+        List<Map<String, Object>> groups = searches.stream()
+            .map(CompletableFuture::join)
+            .toList();
+        return Map.of("q", q, "groups", groups);
     }
 
     @GetMapping("/accounts/{accountId}/quota")
@@ -301,7 +363,15 @@ public class CloudController {
     private CloudProvider provider(CloudAccount account) {
         if (account.getProvider() == ProviderType.DROPBOX && dropbox != null) return dropbox;
         if (account.getProvider() == ProviderType.GOOGLE) return google;
+        if (account.getProvider() == ProviderType.ONEDRIVE && onedrive != null) return onedrive;
         throw new IllegalStateException("Unsupported cloud provider");
+    }
+
+    private boolean containsProvider(String providers, ProviderType provider) {
+        for (String value : providers.split(",")) {
+            if (value.trim().equalsIgnoreCase(provider.name())) return true;
+        }
+        return false;
     }
 
     private String ensureAccessToken(CloudAccount account) {

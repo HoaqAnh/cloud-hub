@@ -15,6 +15,7 @@ import com.cloudhub.auth.UserRepository;
 import com.cloudhub.provider.AccountInfo;
 import com.cloudhub.provider.GoogleDriveProvider;
 import com.cloudhub.provider.DropboxProvider;
+import com.cloudhub.provider.OneDriveProvider;
 import com.cloudhub.provider.ProviderType;
 import com.cloudhub.provider.TokenSet;
 import com.cloudhub.security.TokenCipher;
@@ -32,6 +33,7 @@ public class OAuthController {
     private final UserRepository users;
     private final GoogleDriveProvider google;
     private final DropboxProvider dropbox;
+    private final OneDriveProvider onedrive;
     private final TokenCipher cipher;
 
     public OAuthController(
@@ -41,7 +43,7 @@ public class OAuthController {
         GoogleDriveProvider google,
         TokenCipher cipher
     ) {
-        this(states, accounts, users, google, null, cipher);
+        this(states, accounts, users, google, null, null, cipher);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -51,6 +53,7 @@ public class OAuthController {
         UserRepository users,
         GoogleDriveProvider google,
         DropboxProvider dropbox,
+        OneDriveProvider onedrive,
         TokenCipher cipher
     ) {
         this.states = states;
@@ -58,6 +61,7 @@ public class OAuthController {
         this.users = users;
         this.google = google;
         this.dropbox = dropbox;
+        this.onedrive = onedrive;
         this.cipher = cipher;
     }
 
@@ -79,6 +83,16 @@ public class OAuthController {
         String verifier = dropbox.createCodeVerifier();
         states.save(new OAuthState(state, verifier, ProviderType.DROPBOX, user));
         response.sendRedirect(dropbox.buildAuthorizationUrl(state, dropbox.createCodeChallenge(verifier)).toString());
+    }
+
+    @GetMapping("/onedrive/start")
+    public void startOneDrive(HttpSession session, HttpServletResponse response) throws IOException {
+        User user = currentUser(session);
+        String state = Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(randomBytes(32));
+        String verifier = onedrive.createCodeVerifier();
+        states.save(new OAuthState(state, verifier, ProviderType.ONEDRIVE, user));
+        response.sendRedirect(onedrive.buildAuthorizationUrl(state, onedrive.createCodeChallenge(verifier)).toString());
     }
 
     @GetMapping("/google/callback")
@@ -138,6 +152,40 @@ public class OAuthController {
         CloudAccount account = accounts
             .findByProviderAndExternalAccountId(ProviderType.DROPBOX, info.externalId())
             .orElseGet(() -> new CloudAccount(user, ProviderType.DROPBOX, info.externalId()));
+        account.setDetails(info.displayName(), info.email(), info.scopes());
+        account.setTokens(
+            cipher.encrypt(tokens.accessToken()),
+            cipher.encrypt(tokens.refreshToken()),
+            tokens.expiresAt()
+        );
+        accounts.save(account);
+        states.delete(oauth);
+        response.sendRedirect("http://localhost:5173/dashboard");
+    }
+
+    @GetMapping("/onedrive/callback")
+    @Transactional
+    public void callbackOneDrive(
+        @RequestParam String code,
+        @RequestParam String state,
+        HttpSession session,
+        HttpServletResponse response
+    ) throws IOException {
+        OAuthState oauth = states.findById(state)
+            .orElseThrow(() -> new IllegalArgumentException("Invalid OAuth state"));
+        if (oauth.getExpiresAt().isBefore(Instant.now())) {
+            throw new IllegalArgumentException("OAuth state expired");
+        }
+        User user = currentUser(session);
+        if (!oauth.getUser().getId().equals(user.getId()) || oauth.getProvider() != ProviderType.ONEDRIVE) {
+            throw new IllegalArgumentException("OAuth state belongs to another user or provider");
+        }
+
+        TokenSet tokens = onedrive.exchangeCode(code, oauth.getCodeVerifierEnc());
+        AccountInfo info = onedrive.getAccountInfo(tokens.accessToken());
+        CloudAccount account = accounts
+            .findByProviderAndExternalAccountId(ProviderType.ONEDRIVE, info.externalId())
+            .orElseGet(() -> new CloudAccount(user, ProviderType.ONEDRIVE, info.externalId()));
         account.setDetails(info.displayName(), info.email(), info.scopes());
         account.setTokens(
             cipher.encrypt(tokens.accessToken()),

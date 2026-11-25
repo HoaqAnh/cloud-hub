@@ -127,10 +127,10 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 ### Sprint 5 — ★ DEMO 5: "OneDrive và tìm kiếm xuyên provider"
 **Sprint Goal:** Cả ba provider hoạt động, tìm kiếm chạy trên nhiều tài khoản.
 
-- [ ] OAuth Microsoft Identity Platform (tài khoản cá nhân) + `OneDriveProvider` (Microsoft Graph).
-- [ ] Tìm kiếm fan-out song song, kết quả nhóm theo provider, timeout và lỗi theo từng provider.
-- [ ] Lọc theo provider/loại file; hiển thị trạng thái "đang tìm / lỗi / không có kết quả" cho từng nhóm.
-- [ ] Hỗ trợ nhiều tài khoản cùng một provider (nếu chưa làm).
+- [x] OAuth Microsoft Identity Platform (tài khoản cá nhân) + `OneDriveProvider` (Microsoft Graph).
+- [x] Tìm kiếm fan-out song song, kết quả nhóm theo provider, timeout và lỗi theo từng provider.
+- [x] Lọc theo provider/loại file; hiển thị trạng thái "đang tìm / lỗi / không có kết quả" cho từng nhóm.
+- [x] Hỗ trợ nhiều tài khoản cùng một provider (nếu chưa làm).
 - [ ] Xác minh còn thiếu cho OneDrive (tài khoản cá nhân): `@odata.nextLink`, upload session, quota, tìm kiếm; thử thực tế `permanentDelete` để ghi nhận vào backlog; thumbnail qua `/items/{id}/thumbnails`.
 
 **Kịch bản demo:** Gõ một từ khóa → thấy kết quả từ cả 3 provider, tắt một provider vẫn dùng được các provider còn lại.

@@ -51,6 +51,15 @@ type FileItem = {
 }
 type Breadcrumb = { id?: string; name: string }
 type StorageQuota = { limit: number; usage: number; usageInDrive: number; usageInTrash: number }
+type SearchGroup = {
+  accountId: string
+  accountName: string
+  provider: string
+  status: 'ok' | 'error'
+  items: FileItem[]
+  nextPageToken?: string
+  error?: string
+}
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -82,7 +91,9 @@ function formatSize(size: number | null) {
 }
 
 function providerLabel(provider: string) {
-  return provider === 'DROPBOX' ? 'Dropbox' : 'Google Drive'
+  if (provider === 'DROPBOX') return 'Dropbox'
+  if (provider === 'ONEDRIVE') return 'OneDrive'
+  return 'Google Drive'
 }
 
 function selectedCapabilities(accounts: Account[], selectedAccount: string | null) {
@@ -108,6 +119,8 @@ export default function App() {
   const [fileType, setFileType] = useState('all')
   const [sort, setSort] = useState('name')
   const [quota, setQuota] = useState<Record<string, StorageQuota>>({})
+  const [providerFilter, setProviderFilter] = useState('all')
+  const [searchGroups, setSearchGroups] = useState<SearchGroup[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -149,7 +162,7 @@ export default function App() {
       if (searchQuery.trim()) runSearch()
       else loadFiles(selectedAccount, folderId)
     }
-  }, [fileType, sort])
+  }, [fileType, sort, providerFilter])
 
   async function loadFiles(
     accountId: string,
@@ -178,8 +191,9 @@ export default function App() {
   }
 
   async function runSearch(pageToken = '', append = false) {
-    if (!selectedAccount) return
     if (!searchQuery.trim()) {
+      setSearchGroups([])
+      if (!selectedAccount) return
       await loadFiles(selectedAccount, folderId)
       return
     }
@@ -188,17 +202,18 @@ export default function App() {
     try {
       const query = new URLSearchParams({
         q: searchQuery.trim(),
-        accountId: selectedAccount,
         type: fileType,
         sort,
       })
-      if (folderId) query.set('folderId', folderId)
+      if (providerFilter !== 'all') query.set('providers', providerFilter)
       if (pageToken) query.set('pageToken', pageToken)
-      const value = await api<{ items: FileItem[]; nextPageToken: string }>(
+      const value = await api<{ groups: SearchGroup[] }>(
         `/api/search?${query}`
       )
-      setFiles((current) => append ? [...current, ...value.items] : value.items)
-      setNextPageToken(value.nextPageToken)
+      setSearchGroups(value.groups)
+      const allItems = value.groups.flatMap((group) => group.items)
+      setFiles((current) => append ? [...current, ...allItems] : allItems)
+      setNextPageToken('')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Search failed')
     } finally {
@@ -443,6 +458,7 @@ export default function App() {
               <div className="flex gap-2">
                 <a href="/api/oauth/google/start" className="inline-flex h-10 items-center gap-2 rounded-md bg-cyan-500 px-4 text-sm font-medium text-slate-950 hover:bg-cyan-400"><Cloud className="h-4 w-4" />Google Drive</a>
                 <a href="/api/oauth/dropbox/start" className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-700 px-4 text-sm font-medium text-slate-200 hover:border-cyan-500"><Cloud className="h-4 w-4 text-cyan-400" />Dropbox</a>
+                <a href="/api/oauth/onedrive/start" className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-700 px-4 text-sm font-medium text-slate-200 hover:border-cyan-500"><Cloud className="h-4 w-4 text-cyan-400" />OneDrive</a>
               </div>
             </div>
             {error && <p className="mt-6 rounded-lg border border-rose-900 bg-rose-950/30 p-3 text-sm text-rose-300">{error}</p>}
@@ -548,7 +564,43 @@ export default function App() {
                 <option value="modified">Modified old</option>
                 <option value="modified-desc">Modified new</option>
               </select>
+              <select value={providerFilter} onChange={(event) => setProviderFilter(event.target.value)} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm">
+                <option value="all">All providers</option>
+                <option value="GOOGLE">Google Drive</option>
+                <option value="DROPBOX">Dropbox</option>
+                <option value="ONEDRIVE">OneDrive</option>
+              </select>
             </div>
+
+            {searchQuery.trim() && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                {searchGroups.map((group) => (
+                  <button
+                    key={group.accountId}
+                    onClick={() => {
+                      setSelectedAccount(group.accountId)
+                      setBreadcrumbs([{ name: `${providerLabel(group.provider)} root` }])
+                    }}
+                    className="rounded-lg border border-slate-800 bg-slate-900 p-3 text-left"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-medium">{group.accountName}</span>
+                      <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] text-slate-400">{providerLabel(group.provider)}</span>
+                    </div>
+                    {group.status === 'error' ? (
+                      <p className="mt-2 text-xs text-rose-400">{group.error || 'Search failed'}</p>
+                    ) : group.items.length === 0 ? (
+                      <p className="mt-2 text-xs text-slate-500">No results</p>
+                    ) : (
+                      <p className="mt-2 text-xs text-cyan-400">{group.items.length} result{group.items.length === 1 ? '' : 's'}</p>
+                    )}
+                  </button>
+                ))}
+                {!loading && searchGroups.length === 0 && (
+                  <p className="col-span-full rounded-lg border border-slate-800 p-3 text-sm text-slate-500">Searching providers...</p>
+                )}
+              </div>
+            )}
 
             <div className="mt-6 flex items-center justify-between">
               <nav className="flex items-center gap-1 text-sm">
