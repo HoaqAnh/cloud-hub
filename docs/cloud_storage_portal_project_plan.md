@@ -116,7 +116,7 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 - [x] Rà soát và điều chỉnh interface sau khi có provider thứ hai (ghi lại những gì phải sửa → đầu vào cho retro). Điều chỉnh: controller dispatch theo `ProviderType`, account và root Explorer có huy hiệu provider, thao tác được đọc từ capability matrix.
 - [x] OAuth Dropbox (PKCE) + `DropboxProvider` (xử lý khác biệt path vs ID, cursor phân trang, quota).
 - [x] Root ảo: mỗi tài khoản là một "thư mục gốc" trong Explorer, có huy hiệu provider.
-- [x] Đưa toàn bộ thao tác file của Sprint 2–3 qua Dropbox (ID `id:` làm khóa chuẩn, path chỉ để hiển thị); thumbnail qua `files/get_thumbnail_v2`.
+- [x] Đưa toàn bộ thao tác file của Sprint 2–3 qua Dropbox (ID `id:` làm khóa chuẩn, path chỉ để hiển thị); thumbnail ảnh qua `files/get_thumbnail_v2` (PDF không được Dropbox hỗ trợ, dùng biểu tượng file; preview PDF vẫn stream qua backend).
 - [x] Xác minh còn thiếu cho Dropbox: cursor, upload session, quota, tìm kiếm (điền ✅ hoặc trạng thái hỗ trợ trong capability matrix).
 - [x] Capability matrix được hiện thực hóa trong code (UI ẩn/vô hiệu thao tác không hỗ trợ).
 

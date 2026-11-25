@@ -1,5 +1,6 @@
 package com.cloudhub.provider;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
@@ -188,9 +189,11 @@ public class DropboxProvider implements CloudProvider {
                 .GET().build();
             HttpResponse<InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
             if (response.statusCode() >= 400) throw new GoogleApiException(response.statusCode(), "Dropbox download failed");
-            String mime = response.headers().firstValue("Content-Type").orElse("application/octet-stream");
+            String filename = response.headers().firstValue("Dropbox-API-Result")
+                .map(this::filenameFromMetadataHeader)
+                .orElseGet(() -> getMetadata(accessToken, fileId, "").name());
+            String mime = response.headers().firstValue("Content-Type").orElse(mimeType(filename));
             long size = response.headers().firstValueAsLong("Content-Length").orElse(-1);
-            String filename = metadataName(fileId);
             return new DownloadStream(response.body(), size, mime, filename);
         } catch (GoogleApiException exception) {
             throw exception;
@@ -199,15 +202,22 @@ public class DropboxProvider implements CloudProvider {
         }
     }
 
+    String filenameFromMetadataHeader(String metadataHeader) {
+        try {
+            String filename = mapper.readTree(metadataHeader).path("name").asText();
+            if (filename.isBlank()) {
+                throw new IllegalStateException("Dropbox download metadata did not include a filename");
+            }
+            return filename;
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Cannot parse Dropbox download metadata", exception);
+        }
+    }
+
     @Override
     public DownloadStream thumbnail(String accessToken, String fileId) {
         try {
-            String arg = "{\"path\":\"" + escapeJson(fileId)
-                + "\",\"format\":\"jpeg\",\"size\":\"w128h128\",\"mode\":\"strict\"}";
-            HttpRequest request = HttpRequest.newBuilder(URI.create("https://content.dropboxapi.com/2/files/get_thumbnail_v2"))
-                .header("Authorization", "Bearer " + accessToken)
-                .header("Dropbox-API-Arg", arg)
-                .GET().build();
+            HttpRequest request = thumbnailRequest(accessToken, fileId);
             HttpResponse<InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
             if (response.statusCode() >= 400) throw new GoogleApiException(response.statusCode(), "Dropbox thumbnail failed");
             String mime = response.headers().firstValue("Content-Type").orElse("image/jpeg");
@@ -218,6 +228,17 @@ public class DropboxProvider implements CloudProvider {
         } catch (Exception exception) {
             throw new IllegalStateException("Cannot download Dropbox thumbnail", exception);
         }
+    }
+
+    static HttpRequest thumbnailRequest(String accessToken, String fileId) {
+        String arg = "{\"resource\":{\".tag\":\"path\",\"path\":\"" + escapeJson(fileId)
+            + "\"},\"format\":\"jpeg\",\"size\":\"w128h128\",\"mode\":\"strict\"}";
+        return HttpRequest.newBuilder(URI.create("https://content.dropboxapi.com/2/files/get_thumbnail_v2"))
+            .header("Authorization", "Bearer " + accessToken)
+            .header("Dropbox-API-Arg", arg)
+            .header("Content-Type", "application/octet-stream")
+            .POST(HttpRequest.BodyPublishers.noBody())
+            .build();
     }
 
     @Override
@@ -354,7 +375,17 @@ public class DropboxProvider implements CloudProvider {
         boolean previewable = mime.startsWith("image/") || "application/pdf".equals(mime);
         return new FileItem(id, accountId, ProviderType.DROPBOX, name,
             folder ? "FOLDER" : "FILE", mime, size, modified, parent,
-            false, null, false, previewable ? "/thumbnail" : null, previewable);
+            false, null, false, supportsThumbnail(name) ? "/thumbnail" : null, previewable);
+    }
+
+    static boolean supportsThumbnail(String fileName) {
+        String lowerName = fileName.toLowerCase(Locale.ROOT);
+        int dot = lowerName.lastIndexOf('.');
+        if (dot < 0) return false;
+        return switch (lowerName.substring(dot + 1)) {
+            case "jpg", "jpeg", "png", "tiff", "tif", "gif", "webp", "ppm", "bmp" -> true;
+            default -> false;
+        };
     }
 
     private List<FileItem> filterAndSort(List<FileItem> items, String type, String sort) {
