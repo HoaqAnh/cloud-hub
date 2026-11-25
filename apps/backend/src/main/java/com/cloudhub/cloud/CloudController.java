@@ -14,6 +14,9 @@ import com.cloudhub.auth.User;
 import com.cloudhub.auth.UserRepository;
 import com.cloudhub.provider.FileItem;
 import com.cloudhub.provider.GoogleDriveProvider;
+import com.cloudhub.provider.DropboxProvider;
+import com.cloudhub.provider.CloudProvider;
+import com.cloudhub.provider.ProviderType;
 import com.cloudhub.provider.Page;
 import com.cloudhub.security.TokenCipher;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +42,7 @@ public class CloudController {
     private final CloudAccountRepository accounts;
     private final UserRepository users;
     private final GoogleDriveProvider google;
+    private final DropboxProvider dropbox;
     private final TokenCipher cipher;
 
     public CloudController(
@@ -47,9 +51,21 @@ public class CloudController {
         GoogleDriveProvider google,
         TokenCipher cipher
     ) {
+        this(accounts, users, google, null, cipher);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public CloudController(
+        CloudAccountRepository accounts,
+        UserRepository users,
+        GoogleDriveProvider google,
+        DropboxProvider dropbox,
+        TokenCipher cipher
+    ) {
         this.accounts = accounts;
         this.users = users;
         this.google = google;
+        this.dropbox = dropbox;
         this.cipher = cipher;
     }
 
@@ -60,9 +76,12 @@ public class CloudController {
             .map(account -> Map.<String, Object>of(
                 "id", account.getId().toString(),
                 "provider", account.getProvider().name(),
-                "displayName", account.getDisplayName() == null ? "Google Drive" : account.getDisplayName(),
+                "displayName", account.getDisplayName() == null
+                    ? (account.getProvider() == ProviderType.DROPBOX ? "Dropbox" : "Google Drive")
+                    : account.getDisplayName(),
                 "email", account.getEmail() == null ? "" : account.getEmail(),
-                "status", account.getStatus()
+                "status", account.getStatus(),
+                "capabilities", provider(account).capabilities()
             ))
             .toList();
     }
@@ -80,7 +99,7 @@ public class CloudController {
         User user = currentUser(session);
         CloudAccount account = ownedAccount(accountId, user);
         String accessToken = ensureAccessToken(account);
-        Page<FileItem> page = google.listRoot(
+        Page<FileItem> page = provider(account).listRoot(
             accessToken, folderId, pageToken, accountId.toString(), type, sort
         );
         return Map.of(
@@ -103,7 +122,7 @@ public class CloudController {
         User user = currentUser(session);
         UUID id = UUID.fromString(accountId);
         CloudAccount account = ownedAccount(id, user);
-        Page<FileItem> page = google.search(
+        Page<FileItem> page = provider(account).search(
             ensureAccessToken(account), q, folderId, pageToken, id.toString(), type, sort
         );
         return Map.of(
@@ -120,7 +139,7 @@ public class CloudController {
     ) {
         User user = currentUser(session);
         CloudAccount account = ownedAccount(accountId, user);
-        return google.getQuota(ensureAccessToken(account));
+        return provider(account).getQuota(ensureAccessToken(account));
     }
 
     @GetMapping("/accounts/{accountId}/files/{fileId}")
@@ -132,7 +151,7 @@ public class CloudController {
     ) {
         User user = currentUser(session);
         CloudAccount account = ownedAccount(accountId, user);
-        return google.getMetadata(ensureAccessToken(account), fileId, accountId.toString());
+        return provider(account).getMetadata(ensureAccessToken(account), fileId, accountId.toString());
     }
 
     @GetMapping("/accounts/{accountId}/files/{fileId}/content")
@@ -145,7 +164,7 @@ public class CloudController {
     ) {
         User user = currentUser(session);
         CloudAccount account = ownedAccount(accountId, user);
-        DownloadStream download = google.download(ensureAccessToken(account), fileId);
+        DownloadStream download = provider(account).download(ensureAccessToken(account), fileId);
         String safeFilename = URLEncoder.encode(download.filename(), StandardCharsets.UTF_8)
             .replace("+", "%20");
         String contentDisposition = disposition.equals("inline") ? "inline" : "attachment";
@@ -176,7 +195,7 @@ public class CloudController {
         User user = currentUser(session);
         CloudAccount account = ownedAccount(accountId, user);
         String mimeType = file.getContentType() == null ? "application/octet-stream" : file.getContentType();
-        return google.upload(
+        return provider(account).upload(
             ensureAccessToken(account),
             parentId,
             file.getOriginalFilename(),
@@ -196,7 +215,7 @@ public class CloudController {
     ) {
         User user = currentUser(session);
         CloudAccount account = ownedAccount(accountId, user);
-        DownloadStream download = google.thumbnail(ensureAccessToken(account), fileId);
+        DownloadStream download = provider(account).thumbnail(ensureAccessToken(account), fileId);
         StreamingResponseBody body = output -> {
             try (java.io.InputStream input = download.input()) {
                 input.transferTo(output);
@@ -220,7 +239,7 @@ public class CloudController {
     ) {
         User user = currentUser(session);
         CloudAccount account = ownedAccount(accountId, user);
-        return google.createFolder(
+        return provider(account).createFolder(
             ensureAccessToken(account), parentId, name, accountId.toString()
         );
     }
@@ -235,7 +254,7 @@ public class CloudController {
     ) {
         User user = currentUser(session);
         CloudAccount account = ownedAccount(accountId, user);
-        return google.rename(ensureAccessToken(account), fileId, name, accountId.toString());
+        return provider(account).rename(ensureAccessToken(account), fileId, name, accountId.toString());
     }
 
     @DeleteMapping("/accounts/{accountId}/files/{fileId}")
@@ -247,7 +266,7 @@ public class CloudController {
     ) {
         User user = currentUser(session);
         CloudAccount account = ownedAccount(accountId, user);
-        google.trash(ensureAccessToken(account), fileId);
+        provider(account).trash(ensureAccessToken(account), fileId);
         return Map.of("trashed", true);
     }
 
@@ -261,7 +280,7 @@ public class CloudController {
         CloudAccount account = ownedAccount(accountId, user);
         if (account.getRefreshTokenEnc() != null) {
             try {
-                google.revoke(cipher.decrypt(account.getRefreshTokenEnc()));
+                provider(account).revoke(cipher.decrypt(account.getRefreshTokenEnc()));
             } catch (Exception exception) {
                 account.setStatus("NEEDS_MANUAL_REVOKE");
             }
@@ -279,6 +298,12 @@ public class CloudController {
         return account;
     }
 
+    private CloudProvider provider(CloudAccount account) {
+        if (account.getProvider() == ProviderType.DROPBOX && dropbox != null) return dropbox;
+        if (account.getProvider() == ProviderType.GOOGLE) return google;
+        throw new IllegalStateException("Unsupported cloud provider");
+    }
+
     private String ensureAccessToken(CloudAccount account) {
         if (account.getExpiresAt() != null
             && account.getExpiresAt().isAfter(java.time.Instant.now().plusSeconds(60))) {
@@ -289,7 +314,7 @@ public class CloudController {
         }
         String refreshToken = cipher.decrypt(account.getRefreshTokenEnc());
         try {
-            com.cloudhub.provider.TokenSet refreshed = google.refresh(refreshToken);
+            com.cloudhub.provider.TokenSet refreshed = provider(account).refresh(refreshToken);
             account.setTokens(
                 cipher.encrypt(refreshed.accessToken()),
                 refreshed.refreshToken() == null ? null : cipher.encrypt(refreshed.refreshToken()),

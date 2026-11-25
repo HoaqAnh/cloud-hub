@@ -14,6 +14,7 @@ import com.cloudhub.auth.User;
 import com.cloudhub.auth.UserRepository;
 import com.cloudhub.provider.AccountInfo;
 import com.cloudhub.provider.GoogleDriveProvider;
+import com.cloudhub.provider.DropboxProvider;
 import com.cloudhub.provider.ProviderType;
 import com.cloudhub.provider.TokenSet;
 import com.cloudhub.security.TokenCipher;
@@ -30,6 +31,7 @@ public class OAuthController {
     private final CloudAccountRepository accounts;
     private final UserRepository users;
     private final GoogleDriveProvider google;
+    private final DropboxProvider dropbox;
     private final TokenCipher cipher;
 
     public OAuthController(
@@ -39,10 +41,23 @@ public class OAuthController {
         GoogleDriveProvider google,
         TokenCipher cipher
     ) {
+        this(states, accounts, users, google, null, cipher);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public OAuthController(
+        OAuthStateRepository states,
+        CloudAccountRepository accounts,
+        UserRepository users,
+        GoogleDriveProvider google,
+        DropboxProvider dropbox,
+        TokenCipher cipher
+    ) {
         this.states = states;
         this.accounts = accounts;
         this.users = users;
         this.google = google;
+        this.dropbox = dropbox;
         this.cipher = cipher;
     }
 
@@ -54,6 +69,16 @@ public class OAuthController {
         String verifier = google.createCodeVerifier();
         states.save(new OAuthState(state, verifier, ProviderType.GOOGLE, user));
         response.sendRedirect(google.buildAuthorizationUrl(state, google.createCodeChallenge(verifier)).toString());
+    }
+
+    @GetMapping("/dropbox/start")
+    public void startDropbox(HttpSession session, HttpServletResponse response) throws IOException {
+        User user = currentUser(session);
+        String state = Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(randomBytes(32));
+        String verifier = dropbox.createCodeVerifier();
+        states.save(new OAuthState(state, verifier, ProviderType.DROPBOX, user));
+        response.sendRedirect(dropbox.buildAuthorizationUrl(state, dropbox.createCodeChallenge(verifier)).toString());
     }
 
     @GetMapping("/google/callback")
@@ -79,6 +104,40 @@ public class OAuthController {
         CloudAccount account = accounts
             .findByProviderAndExternalAccountId(ProviderType.GOOGLE, info.externalId())
             .orElseGet(() -> new CloudAccount(user, ProviderType.GOOGLE, info.externalId()));
+        account.setDetails(info.displayName(), info.email(), info.scopes());
+        account.setTokens(
+            cipher.encrypt(tokens.accessToken()),
+            cipher.encrypt(tokens.refreshToken()),
+            tokens.expiresAt()
+        );
+        accounts.save(account);
+        states.delete(oauth);
+        response.sendRedirect("http://localhost:5173/dashboard");
+    }
+
+    @GetMapping("/dropbox/callback")
+    @Transactional
+    public void callbackDropbox(
+        @RequestParam String code,
+        @RequestParam String state,
+        HttpSession session,
+        HttpServletResponse response
+    ) throws IOException {
+        OAuthState oauth = states.findById(state)
+            .orElseThrow(() -> new IllegalArgumentException("Invalid OAuth state"));
+        if (oauth.getExpiresAt().isBefore(Instant.now())) {
+            throw new IllegalArgumentException("OAuth state expired");
+        }
+        User user = currentUser(session);
+        if (!oauth.getUser().getId().equals(user.getId()) || oauth.getProvider() != ProviderType.DROPBOX) {
+            throw new IllegalArgumentException("OAuth state belongs to another user or provider");
+        }
+
+        TokenSet tokens = dropbox.exchangeCode(code, oauth.getCodeVerifierEnc());
+        AccountInfo info = dropbox.getAccountInfo(tokens.accessToken());
+        CloudAccount account = accounts
+            .findByProviderAndExternalAccountId(ProviderType.DROPBOX, info.externalId())
+            .orElseGet(() -> new CloudAccount(user, ProviderType.DROPBOX, info.externalId()));
         account.setDetails(info.displayName(), info.email(), info.scopes());
         account.setTokens(
             cipher.encrypt(tokens.accessToken()),

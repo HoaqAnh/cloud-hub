@@ -25,7 +25,7 @@ Linux, macOS, or Bash:
 cp .env.example .env
 ```
 
-The dev scripts load `.env` into the backend process. If `.env` is absent, they use `.env.example`. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env` to enable Google Drive OAuth; keep those secrets out of frontend variables.
+The dev scripts load `.env` into the backend process. If `.env` is absent, they use `.env.example`. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to enable Google Drive OAuth, or `DROPBOX_CLIENT_ID` and `DROPBOX_CLIENT_SECRET` to enable Dropbox OAuth. Configure the matching redirect URI in each provider app; keep secrets out of frontend variables.
 
 PowerShell:
 

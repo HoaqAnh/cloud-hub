@@ -99,12 +99,12 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 ### Sprint 3 — ★ DEMO 3 (v0.1): "Drive hoàn chỉnh"
 **Sprint Goal:** Mọi tính năng MVP hoạt động trọn vẹn với Google Drive.
 
-- [ ] Tạo thư mục, đổi tên, xóa **vào thùng rác** (hộp thoại xác nhận; xóa vĩnh viễn nằm trong backlog).
-- [ ] Preview ảnh và PDF: stream `inline` qua endpoint content; thumbnail grid dùng `thumbnailLink` qua backend.
-- [ ] Hiển thị dung lượng (quota) trên Dashboard.
-- [ ] Tìm kiếm theo tên (server-side của Drive), lọc theo loại, sắp xếp theo tên/kích thước/ngày sửa.
-- [ ] Ngắt kết nối: thu hồi token ở Google + xóa dữ liệu local.
-- [ ] Bộ test adapter với mock (WireMock) cho các thao tác chính.
+- [x] Tạo thư mục, đổi tên, xóa **vào thùng rác** (hộp thoại xác nhận; xóa vĩnh viễn nằm trong backlog).
+- [x] Preview ảnh và PDF: stream `inline` qua endpoint content; thumbnail grid dùng `thumbnailLink` qua backend.
+- [x] Hiển thị dung lượng (quota) trên Dashboard.
+- [x] Tìm kiếm theo tên (server-side của Drive), lọc theo loại, sắp xếp theo tên/kích thước/ngày sửa.
+- [x] Ngắt kết nối: thu hồi token ở Google + xóa dữ liệu local.
+- [x] Bộ test adapter với mock (WireMock) cho các thao tác chính.
 
 **Kịch bản demo:** Chạy toàn bộ checklist tiêu chí MVP với Drive. **Đây là điểm mốc "có sản phẩm dùng được".**
 
@@ -113,12 +113,12 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 ### Sprint 4 — ★ DEMO 4: "Dropbox và root ảo thống nhất"
 **Sprint Goal:** Hai provider cùng xuất hiện trong một giao diện; abstraction được kiểm chứng.
 
-- [ ] Rà soát và điều chỉnh interface sau khi có provider thứ hai (ghi lại những gì phải sửa → đầu vào cho retro).
-- [ ] OAuth Dropbox (PKCE) + `DropboxProvider` (xử lý khác biệt path vs ID, cursor phân trang, quota).
-- [ ] Root ảo: mỗi tài khoản là một "thư mục gốc" trong Explorer, có huy hiệu provider.
-- [ ] Đưa toàn bộ thao tác file của Sprint 2–3 qua Dropbox (ID `id:` làm khóa chuẩn, path chỉ để hiển thị); thumbnail qua `files/get_thumbnail_v2`.
-- [ ] Xác minh còn thiếu cho Dropbox: cursor, upload session, quota, tìm kiếm (điền ⏳ trong capability matrix).
-- [ ] Capability matrix được hiện thực hóa trong code (UI ẩn/vô hiệu thao tác không hỗ trợ).
+- [x] Rà soát và điều chỉnh interface sau khi có provider thứ hai (ghi lại những gì phải sửa → đầu vào cho retro). Điều chỉnh: controller dispatch theo `ProviderType`, account và root Explorer có huy hiệu provider, thao tác được đọc từ capability matrix.
+- [x] OAuth Dropbox (PKCE) + `DropboxProvider` (xử lý khác biệt path vs ID, cursor phân trang, quota).
+- [x] Root ảo: mỗi tài khoản là một "thư mục gốc" trong Explorer, có huy hiệu provider.
+- [x] Đưa toàn bộ thao tác file của Sprint 2–3 qua Dropbox (ID `id:` làm khóa chuẩn, path chỉ để hiển thị); thumbnail qua `files/get_thumbnail_v2`.
+- [x] Xác minh còn thiếu cho Dropbox: cursor, upload session, quota, tìm kiếm (điền ✅ hoặc trạng thái hỗ trợ trong capability matrix).
+- [x] Capability matrix được hiện thực hóa trong code (UI ẩn/vô hiệu thao tác không hỗ trợ).
 
 **Kịch bản demo:** Hai tài khoản trong một Explorer; upload/rename/delete ở cả hai.
 

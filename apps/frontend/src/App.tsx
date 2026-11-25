@@ -24,6 +24,17 @@ type Account = {
   displayName: string
   email: string
   status: string
+  capabilities?: {
+    pagination: boolean
+    search: boolean
+    quota: boolean
+    download: boolean
+    upload: boolean
+    createFolder: boolean
+    rename: boolean
+    trash: boolean
+    thumbnail: boolean
+  }
 }
 type FileItem = {
   id: string
@@ -68,6 +79,14 @@ function formatSize(size: number | null) {
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
   if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`
   return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
+function providerLabel(provider: string) {
+  return provider === 'DROPBOX' ? 'Dropbox' : 'Google Drive'
+}
+
+function selectedCapabilities(accounts: Account[], selectedAccount: string | null) {
+  return accounts.find((account) => account.id === selectedAccount)?.capabilities
 }
 
 export default function App() {
@@ -310,7 +329,8 @@ export default function App() {
 
   async function trashFile(file: FileItem) {
     if (!selectedAccount) return
-    if (!window.confirm(`Move "${file.name}" to Google Drive trash?`)) return
+    const account = accounts.find((item) => item.id === selectedAccount)
+    if (!window.confirm(`Move "${file.name}" to ${account ? providerLabel(account.provider) : 'cloud'} trash?`)) return
     try {
       await api<{ trashed: boolean }>(
         `/api/accounts/${selectedAccount}/files/${encodeURIComponent(file.id)}`,
@@ -323,7 +343,8 @@ export default function App() {
   }
 
   async function disconnectAccount(accountId: string) {
-    if (!window.confirm('Disconnect this Google account and delete its local tokens?')) return
+    const account = accounts.find((item) => item.id === accountId)
+    if (!window.confirm(`Disconnect this ${account ? providerLabel(account.provider) : 'cloud'} account and delete its local tokens?`)) return
     try {
       await api<{ disconnected: boolean }>(`/api/accounts/${accountId}`, { method: 'DELETE' })
       await loadAccounts()
@@ -419,7 +440,10 @@ export default function App() {
           <div className="mx-auto max-w-5xl p-8">
             <div className="flex items-end justify-between">
               <div><p className="text-sm text-cyan-400">Accounts</p><h1 className="mt-1 text-3xl font-semibold">Dashboard</h1></div>
-              <a href="/api/oauth/google/start" className="inline-flex h-10 items-center gap-2 rounded-md bg-cyan-500 px-4 text-sm font-medium text-slate-950 hover:bg-cyan-400"><Cloud className="h-4 w-4" />Connect Google Drive</a>
+              <div className="flex gap-2">
+                <a href="/api/oauth/google/start" className="inline-flex h-10 items-center gap-2 rounded-md bg-cyan-500 px-4 text-sm font-medium text-slate-950 hover:bg-cyan-400"><Cloud className="h-4 w-4" />Google Drive</a>
+                <a href="/api/oauth/dropbox/start" className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-700 px-4 text-sm font-medium text-slate-200 hover:border-cyan-500"><Cloud className="h-4 w-4 text-cyan-400" />Dropbox</a>
+              </div>
             </div>
             {error && <p className="mt-6 rounded-lg border border-rose-900 bg-rose-950/30 p-3 text-sm text-rose-300">{error}</p>}
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -431,7 +455,13 @@ export default function App() {
                     navigate('explorer')
                     loadFiles(account.id)
                   }} className="w-full text-left">
-                    <div className="flex items-start justify-between"><div className="grid h-10 w-10 place-items-center rounded-lg bg-cyan-500/10 text-cyan-400"><HardDrive /></div><span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-400">{account.status}</span></div>
+                    <div className="flex items-start justify-between">
+                      <div className="grid h-10 w-10 place-items-center rounded-lg bg-cyan-500/10 text-cyan-400"><HardDrive /></div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full border border-slate-700 px-2 py-1 text-xs text-slate-300">{providerLabel(account.provider)}</span>
+                        <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-400">{account.status}</span>
+                      </div>
+                    </div>
                     <h2 className="mt-4 font-medium">{account.displayName}</h2><p className="mt-1 text-sm text-slate-400">{account.email || 'Google account'}</p>
                     {quota[account.id] && (
                       <div className="mt-4">
@@ -458,24 +488,49 @@ export default function App() {
                     className="hidden"
                     onChange={(event) => handleUpload(event.target.files?.[0])}
                   />
-                  <Button onClick={createFolder}><Plus className="h-4 w-4" />New folder</Button>
-                  <Button onClick={uploadFile} disabled={uploading}><Upload className="h-4 w-4" />Upload</Button>
+                  <Button
+                    onClick={createFolder}
+                    disabled={selectedCapabilities(accounts, selectedAccount)?.createFolder === false}
+                  ><Plus className="h-4 w-4" />New folder</Button>
+                  <Button
+                    onClick={uploadFile}
+                    disabled={uploading || selectedCapabilities(accounts, selectedAccount)?.upload === false}
+                  ><Upload className="h-4 w-4" />Upload</Button>
                   <Button onClick={() => selectedAccount && loadFiles(selectedAccount, folderId)}><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh</Button>
                 </div>
               )}
             </div>
-            {accounts.length > 1 && <select value={selectedAccount ?? ''} onChange={(event) => {
-              setSelectedAccount(event.target.value)
-              setBreadcrumbs([{ name: 'My Drive' }])
-              loadFiles(event.target.value)
-            }} className="mt-6 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2">{accounts.map(account => <option key={account.id} value={account.id}>{account.displayName}</option>)}</select>}
+            {accounts.length > 0 && (
+              <div className="mt-6 flex flex-wrap items-center gap-2">
+                {accounts.map((account) => (
+                  <button
+                    key={account.id}
+                    onClick={() => {
+                      setSelectedAccount(account.id)
+                      setBreadcrumbs([{ name: `${providerLabel(account.provider)} root` }])
+                      setSearchQuery('')
+                      loadFiles(account.id)
+                    }}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                      selectedAccount === account.id
+                        ? 'border-cyan-500 bg-cyan-500/10 text-cyan-300'
+                        : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600'
+                    }`}
+                  >
+                    <HardDrive className="h-4 w-4" />
+                    <span>{account.displayName}</span>
+                    <span className="rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">{providerLabel(account.provider)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="mt-6 flex gap-2">
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 onKeyDown={(event) => { if (event.key === 'Enter') runSearch() }}
-                placeholder="Search Drive by name"
+                placeholder="Search cloud files by name"
                 className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-cyan-500"
               />
               <select value={fileType} onChange={(event) => { setFileType(event.target.value); }} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm">
@@ -531,12 +586,12 @@ export default function App() {
                     <span className="text-slate-400">{file.modifiedAt ? new Date(file.modifiedAt).toLocaleString() : '-'}</span>
                     <span className="text-slate-400">{formatSize(file.size)}</span>
                     <span className="flex justify-end gap-1">
-                      <button onClick={() => renameFile(file)} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-cyan-300" aria-label={`Rename ${file.name}`}><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => trashFile(file)} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-rose-400" aria-label={`Trash ${file.name}`}><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => renameFile(file)} disabled={selectedCapabilities(accounts, selectedAccount)?.rename === false} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Rename ${file.name}`}><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => trashFile(file)} disabled={selectedCapabilities(accounts, selectedAccount)?.trash === false} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Trash ${file.name}`}><Trash2 className="h-4 w-4" /></button>
                     </span>
                   </div>
                 ))}
-                {!loading && !files.length && <p className="p-8 text-center text-slate-400">{selectedAccount ? 'This folder is empty.' : 'Connect Google Drive to browse files.'}</p>}
+                {!loading && !files.length && <p className="p-8 text-center text-slate-400">{selectedAccount ? 'This folder is empty.' : 'Connect a cloud account to browse files.'}</p>}
               </div>
             ) : (
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -561,8 +616,8 @@ export default function App() {
                       <p className="mt-2 text-xs text-slate-500">{formatSize(file.size)} · {file.modifiedAt ? new Date(file.modifiedAt).toLocaleDateString() : '-'}</p>
                     </button>
                     <div className="mt-2 flex justify-end gap-1">
-                      <button onClick={() => renameFile(file)} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-cyan-300" aria-label={`Rename ${file.name}`}><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => trashFile(file)} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-rose-400" aria-label={`Trash ${file.name}`}><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => renameFile(file)} disabled={selectedCapabilities(accounts, selectedAccount)?.rename === false} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Rename ${file.name}`}><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => trashFile(file)} disabled={selectedCapabilities(accounts, selectedAccount)?.trash === false} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Trash ${file.name}`}><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </div>
                 ))}
