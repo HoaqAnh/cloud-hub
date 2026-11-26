@@ -45,6 +45,12 @@ export function AppLayout({
 
   return (
     <div className="min-h-screen bg-[#f7f7fb] text-slate-900">
+      <a
+        href="#main-content"
+        className="sr-only fixed left-4 top-4 z-50 rounded-md bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-md focus-visible:not-sr-only focus-visible:ring-2 focus-visible:ring-violet-600"
+      >
+        {t('skipToContent')}
+      </a>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-[#111019] px-4 py-6 text-white lg:flex">
         <Link to="/dashboard" className="flex items-center gap-3 px-3">
           <span className="grid size-10 place-items-center overflow-hidden rounded-xl bg-violet-500/10">
@@ -63,6 +69,7 @@ export function AppLayout({
               <Link
                 key={to}
                 to={to}
+                aria-current={active ? 'page' : undefined}
                 className={`flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors ${
                   active
                     ? 'bg-violet-500/15 text-violet-200'
@@ -147,6 +154,7 @@ export function AppLayout({
             <Link
               key={to}
               to={to}
+              aria-current={active ? 'page' : undefined}
               className={`flex flex-1 flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium ${
                 active ? 'text-violet-700' : 'text-slate-500'
               }`}
@@ -158,7 +166,11 @@ export function AppLayout({
         })}
       </nav>
 
-      <main className="min-h-screen px-4 pb-24 pt-20 sm:px-6 lg:ml-64 lg:px-10 lg:pb-10 lg:pt-24">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="min-h-screen px-4 pb-24 pt-20 sm:px-6 lg:ml-64 lg:px-10 lg:pb-10 lg:pt-24"
+      >
         <div className="mx-auto max-w-7xl space-y-4">
           {logoutError && (
             <Alert variant="destructive" className="border-rose-200 bg-rose-50 text-rose-800">

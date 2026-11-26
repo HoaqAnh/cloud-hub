@@ -127,15 +127,33 @@ function FileCard({ file, state, t }: {
   )
 }
 
-function EmptyState({ hasAccount, t }: { hasAccount: boolean; t: (key: TranslationKey) => string }) {
+function EmptyState({
+  hasAccount,
+  message,
+  onClearFilters,
+  t,
+}: {
+  hasAccount: boolean
+  message: string
+  onClearFilters?: () => void
+  t: (key: TranslationKey) => string
+}) {
   return (
     <div className="flex flex-col items-center px-6 py-16 text-center">
       <span className="grid size-14 place-items-center rounded-2xl bg-violet-50 text-violet-600">
         {hasAccount ? <Folder className="size-7" /> : <Cloud className="size-7" />}
       </span>
-      <p className="mt-4 text-sm font-medium text-slate-800">
-        {hasAccount ? t('emptyFolder') : t('connectToBrowse')}
-      </p>
+      <p className="mt-4 text-sm font-medium text-slate-800">{message}</p>
+      {onClearFilters && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onClearFilters}
+          className="mt-4 border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+        >
+          {t('clearFilters')}
+        </Button>
+      )}
     </div>
   )
 }
@@ -143,6 +161,9 @@ function EmptyState({ hasAccount, t }: { hasAccount: boolean; t: (key: Translati
 export function ExplorerPage({ accounts, accountsLoading, t }: ExplorerPageProps) {
   const state = useExplorer(accounts, t)
   const fileInput = useRef<HTMLInputElement>(null)
+  const hasAppliedFilters = Boolean(state.searchQuery.trim())
+    || state.fileType !== 'all'
+    || state.providerFilter !== 'all'
 
   function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Enter') state.refresh()
@@ -200,11 +221,17 @@ export function ExplorerPage({ accounts, accountsLoading, t }: ExplorerPageProps
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {accounts.map((account) => (
+      <div
+        role="group"
+        aria-label={t('selectAccount')}
+        aria-busy={accountsLoading}
+        className="flex flex-wrap gap-2"
+      >
+        {!accountsLoading && accounts.map((account) => (
           <button
             key={account.id}
             onClick={() => state.selectAccount(account.id)}
+            aria-pressed={state.activeAccountId === account.id}
             className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors ${
               state.activeAccountId === account.id
                 ? 'border-violet-200 bg-violet-50 text-violet-800'
@@ -232,13 +259,17 @@ export function ExplorerPage({ accounts, accountsLoading, t }: ExplorerPageProps
               value={state.searchQuery}
               onChange={(event) => state.setSearchQuery(event.target.value)}
               onKeyDown={handleSearchKeyDown}
+              aria-label={t('search')}
               placeholder={t('search')}
               className="h-10 border-slate-200 bg-slate-50/70 pl-9 focus-visible:border-violet-400 focus-visible:ring-violet-400"
             />
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:flex">
             <Select value={state.fileType} onValueChange={state.setFileType}>
-              <SelectTrigger className="h-10 w-full min-w-32 border-slate-200 bg-white text-slate-700 focus-visible:border-violet-400 focus-visible:ring-violet-400">
+              <SelectTrigger
+                aria-label={t('filterByType')}
+                className="h-10 w-full min-w-32 border-slate-200 bg-white text-slate-700 focus-visible:border-violet-400 focus-visible:ring-violet-400"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="border-slate-200 bg-white text-slate-700">
@@ -250,21 +281,27 @@ export function ExplorerPage({ accounts, accountsLoading, t }: ExplorerPageProps
               </SelectContent>
             </Select>
             <Select value={state.sort} onValueChange={state.setSort}>
-              <SelectTrigger className="h-10 w-full min-w-36 border-slate-200 bg-white text-slate-700 focus-visible:border-violet-400 focus-visible:ring-violet-400">
+              <SelectTrigger
+                aria-label={t('sortBy')}
+                className="h-10 w-full min-w-36 border-slate-200 bg-white text-slate-700 focus-visible:border-violet-400 focus-visible:ring-violet-400"
+              >
                 <ArrowUpDown className="mr-1 size-4 text-slate-400" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="border-slate-200 bg-white text-slate-700">
-                <SelectItem value="name"><ArrowDownAZ className="mr-2 size-4" />Name A–Z</SelectItem>
-                <SelectItem value="name-desc">Name Z–A</SelectItem>
-                <SelectItem value="size">Size: small first</SelectItem>
-                <SelectItem value="size-desc">Size: large first</SelectItem>
-                <SelectItem value="modified">Modified: oldest</SelectItem>
-                <SelectItem value="modified-desc">Modified: newest</SelectItem>
+                <SelectItem value="name"><ArrowDownAZ className="mr-2 size-4" />{t('sortNameAsc')}</SelectItem>
+                <SelectItem value="name-desc">{t('sortNameDesc')}</SelectItem>
+                <SelectItem value="size">{t('sortSizeAsc')}</SelectItem>
+                <SelectItem value="size-desc">{t('sortSizeDesc')}</SelectItem>
+                <SelectItem value="modified">{t('sortModifiedAsc')}</SelectItem>
+                <SelectItem value="modified-desc">{t('sortModifiedDesc')}</SelectItem>
               </SelectContent>
             </Select>
             <Select value={state.providerFilter} onValueChange={state.setProviderFilter}>
-              <SelectTrigger className="col-span-2 h-10 w-full min-w-36 border-slate-200 bg-white text-slate-700 focus-visible:border-violet-400 focus-visible:ring-violet-400 sm:col-span-1">
+              <SelectTrigger
+                aria-label={t('filterByProvider')}
+                className="col-span-2 h-10 w-full min-w-36 border-slate-200 bg-white text-slate-700 focus-visible:border-violet-400 focus-visible:ring-violet-400 sm:col-span-1"
+              >
                 <SelectValue placeholder={t('allProviders')} />
               </SelectTrigger>
               <SelectContent className="border-slate-200 bg-white text-slate-700">
@@ -356,21 +393,42 @@ export function ExplorerPage({ accounts, accountsLoading, t }: ExplorerPageProps
           </div>
         )}
 
-        {state.error && (
-          <div className="p-4">
+        {state.error ? (
+          <div className="flex flex-col items-start gap-3 p-4">
             <Alert variant="destructive" className="border-rose-200 bg-rose-50 text-rose-800">
               <AlertDescription>{state.error}</AlertDescription>
             </Alert>
+            <Button
+              variant="outline"
+              onClick={state.refresh}
+              className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            >
+              {t('tryAgain')}
+            </Button>
           </div>
-        )}
-
-        {state.loading && state.files.length === 0 ? (
+        ) : accountsLoading && accounts.length === 0 ? (
+          <div role="status" className="flex items-center justify-center gap-2 px-6 py-16 text-sm text-slate-500">
+            <RefreshCw className="size-4 animate-spin text-violet-600" />
+            {t('loadingAccounts')}
+          </div>
+        ) : state.loading && state.files.length === 0 ? (
           <div className="flex items-center justify-center gap-2 px-6 py-16 text-sm text-slate-500">
             <RefreshCw className="size-4 animate-spin text-violet-600" />
             {t('loading')}...
           </div>
         ) : state.files.length === 0 ? (
-          <EmptyState hasAccount={Boolean(state.activeAccountId)} t={t} />
+          <EmptyState
+            hasAccount={Boolean(state.activeAccountId)}
+            message={
+              hasAppliedFilters
+                ? t('noResults')
+                : state.activeAccountId
+                  ? t('emptyFolder')
+                  : t('connectToBrowse')
+            }
+            onClearFilters={hasAppliedFilters ? state.clearFilters : undefined}
+            t={t}
+          />
         ) : state.view === 'list' ? (
           <div>
             <div className="hidden grid-cols-[minmax(0,1fr)_150px_100px_170px] border-b border-slate-100 bg-slate-50/70 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 md:grid">

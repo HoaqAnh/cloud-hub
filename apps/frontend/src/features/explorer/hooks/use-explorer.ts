@@ -264,6 +264,14 @@ export function useExplorer(accounts: Account[], t: (key: TranslationKey) => str
     }
   }
 
+  function clearFilters() {
+    requestId.current += 1
+    setSearchQuery('')
+    setFileType('all')
+    setProviderFilter('all')
+    setSearchGroups([])
+  }
+
   function loadMore() {
     if (activeAccountId && nextPageToken && !searchQuery.trim()) {
       void loadFiles(activeAccountId, folderId, nextPageToken, true)
@@ -326,6 +334,7 @@ export function useExplorer(accounts: Account[], t: (key: TranslationKey) => str
     downloadFile,
     previewFile,
     refresh,
+    clearFilters,
     loadMore,
     uploadFile,
     confirmCreateFolder,
