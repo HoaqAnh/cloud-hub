@@ -463,9 +463,8 @@ public class GoogleDriveProvider implements CloudProvider {
         };
     }
 
-    private static String encodeOrder(String sort) {
-        if (sort == null) return "folder,name";
-        return switch (sort) {
+    static String encodeOrder(String sort) {
+        String order = switch (sort == null ? "" : sort) {
             case "name-desc" -> "folder,name desc";
             case "size" -> "folder,quotaBytesUsed";
             case "size-desc" -> "folder,quotaBytesUsed desc";
@@ -473,6 +472,7 @@ public class GoogleDriveProvider implements CloudProvider {
             case "modified-desc" -> "folder,modifiedTime desc";
             default -> "folder,name";
         };
+        return encode(order);
     }
 
     private static String encodePath(String value) {

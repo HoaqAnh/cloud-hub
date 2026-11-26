@@ -6,26 +6,29 @@
 
 ## 1. Quy trình Scrum cho dự án cá nhân
 
-| Hạng mục | Cách áp dụng |
-|---|---|
-| Vai trò | Bạn đảm nhiệm cả Product Owner, Scrum Master, Developer |
-| Độ dài sprint | 2 tuần (có thể rút còn 1 tuần nếu thời gian rảnh ít và đều) |
-| Product Backlog | GitHub Projects / Trello; mỗi mục là một user story |
+| Hạng mục                  | Cách áp dụng                                                            |
+| ------------------------- | ----------------------------------------------------------------------- |
+| Vai trò                   | Bạn đảm nhiệm cả Product Owner, Scrum Master, Developer                 |
+| Độ dài sprint             | 2 tuần (có thể rút còn 1 tuần nếu thời gian rảnh ít và đều)             |
+| Product Backlog           | GitHub Projects / Trello; mỗi mục là một user story                     |
 | Sprint Planning (≈ 1 giờ) | Chọn story theo năng lực thực tế (velocity), đặt Sprint Goal bằng 1 câu |
-| Daily (≈ 5 phút, viết ra) | Hôm qua làm gì / hôm nay làm gì / vướng gì |
-| Sprint Review | Tự quay video hoặc chạy demo theo kịch bản; ghi lại kết quả |
-| Retrospective (≈ 30 phút) | Giữ / Bỏ / Thử; ghi vào `docs/retro/` |
-| Time-box | Hết sprint mà story chưa Done thì đưa lại backlog, không kéo dài sprint |
+| Daily (≈ 5 phút, viết ra) | Hôm qua làm gì / hôm nay làm gì / vướng gì                              |
+| Sprint Review             | Tự quay video hoặc chạy demo theo kịch bản; ghi lại kết quả             |
+| Retrospective (≈ 30 phút) | Giữ / Bỏ / Thử; ghi vào `docs/retro/`                                   |
+| Time-box                  | Hết sprint mà story chưa Done thì đưa lại backlog, không kéo dài sprint |
 
 ### Định nghĩa user story
+
 `Là chủ sở hữu portal, tôi muốn <việc> để <lợi ích>.` kèm tiêu chí chấp nhận (acceptance criteria) dạng Given/When/Then.
 
 ### Definition of Ready (story sẵn sàng đưa vào sprint)
+
 - Có tiêu chí chấp nhận rõ ràng.
 - Nhỏ đủ để xong trong ≤ 2–3 ngày.
 - Đã biết phụ thuộc (ví dụ cần app OAuth của provider nào).
 
 ### Definition of Done
+
 - Chạy được end-to-end trên local với tài khoản thật/test.
 - Có test cho logic chính (unit/integration, provider được mock).
 - Lint, type-check, build đều pass.
@@ -50,6 +53,7 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 ## 3. Chi tiết từng phase / sprint
 
 ### Sprint 0 — Nền móng (3–5 ngày, không tính là sprint đầy đủ)
+
 **Sprint Goal:** Một lệnh dựng được môi trường; đã xác nhận OAuth khả thi.
 
 - [x] Khởi tạo monorepo, cấu trúc thư mục, `.editorconfig`, `.env.example`.
@@ -67,6 +71,7 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 ---
 
 ### Sprint 1 — ★ DEMO 1: "Đăng nhập, kết nối Google Drive, xem file"
+
 **Sprint Goal:** Tôi đăng nhập portal, kết nối Google Drive và thấy danh sách file ở thư mục gốc.
 
 - [x] Đăng nhập/đăng xuất local (một người dùng, mật khẩu băm bcrypt/argon2; thông tin khởi tạo từ biến môi trường hoặc seed).
@@ -83,6 +88,7 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 ---
 
 ### Sprint 2 — ★ DEMO 2: "Duyệt đầy đủ, tải xuống, tải lên"
+
 **Sprint Goal:** Tôi duyệt cây thư mục Drive thoải mái, tải file xuống và tải file lên.
 
 - [x] Điều hướng thư mục, breadcrumb, phân trang/tải thêm (page token); xử lý shortcut (hiển thị + phân giải sang đích).
@@ -97,6 +103,7 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 ---
 
 ### Sprint 3 — ★ DEMO 3 (v0.1): "Drive hoàn chỉnh"
+
 **Sprint Goal:** Mọi tính năng MVP hoạt động trọn vẹn với Google Drive.
 
 - [x] Tạo thư mục, đổi tên, xóa **vào thùng rác** (hộp thoại xác nhận; xóa vĩnh viễn nằm trong backlog).
@@ -111,6 +118,7 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 ---
 
 ### Sprint 4 — ★ DEMO 4: "Dropbox và root ảo thống nhất"
+
 **Sprint Goal:** Hai provider cùng xuất hiện trong một giao diện; abstraction được kiểm chứng.
 
 - [x] Rà soát và điều chỉnh interface sau khi có provider thứ hai (ghi lại những gì phải sửa → đầu vào cho retro). Điều chỉnh: controller dispatch theo `ProviderType`, account và root Explorer có huy hiệu provider, thao tác được đọc từ capability matrix.
@@ -125,6 +133,7 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 ---
 
 ### Sprint 5 — ★ DEMO 5: "OneDrive và tìm kiếm xuyên provider"
+
 **Sprint Goal:** Cả ba provider hoạt động, tìm kiếm chạy trên nhiều tài khoản.
 
 - [x] OAuth Microsoft Identity Platform (tài khoản cá nhân) + `OneDriveProvider` (Microsoft Graph).
@@ -138,19 +147,20 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 ---
 
 ### Sprint 6 — ★ MVP v1.0: "Hardening và hoàn thiện"
+
 **Sprint Goal:** MVP đạt đủ tiêu chí thành công trong `project_goals.md`.
 
-- [ ] Rà soát bảo mật theo checklist trong `project_specs.md`.
-- [ ] Trải nghiệm lỗi: token hết hạn → "Kết nối lại"; rate limit → thử lại có backoff; hết dung lượng khi upload.
-- [ ] Hiệu năng: kiểm tra thư mục lớn, ảo hóa danh sách nếu cần.
-- [ ] Bổ sung test E2E cho luồng chính (tùy chọn Playwright).
-- [ ] README: hướng dẫn cài đặt, tạo app OAuth cho từng provider, cách chạy.
-- [ ] Dọn nợ kỹ thuật, tổng kết dự án, cập nhật backlog tương lai.
+- [x] Rà soát bảo mật theo checklist trong `project_specs.md`.
+- [x] Trải nghiệm lỗi: token hết hạn → "Kết nối lại"; rate limit → thử lại có backoff; hết dung lượng khi upload.
+- [x] Hiệu năng: kiểm tra thư mục lớn, ảo hóa danh sách nếu cần.
+- [x] Bổ sung test E2E cho luồng chính (tùy chọn Playwright).
+- [x] README: hướng dẫn cài đặt, tạo app OAuth cho từng provider, cách chạy.
+- [x] Dọn nợ kỹ thuật, tổng kết dự án, cập nhật backlog tương lai.
 
 ## 4. Backlog tương lai (sau MVP, theo thứ tự đề xuất)
 
 1. Chuyển/sao chép file giữa các cloud (giá trị thực tế cao nhất).
-1b. Xóa vĩnh viễn (nếu provider hỗ trợ ổn định) và xem tài liệu Office qua `files/get_preview` của Dropbox.
+   1b. Xóa vĩnh viễn (nếu provider hỗ trợ ổn định) và xem tài liệu Office qua `files/get_preview` của Dropbox.
 2. Di chuyển/sao chép trong cùng tài khoản; chọn nhiều file, thao tác hàng loạt; kéo thả.
 3. Thùng rác & khôi phục; "Shared with me".
 4. Tìm kiếm tốt hơn (index metadata cục bộ).
@@ -158,15 +168,16 @@ Sprint 6  ★ MVP v1.0        → hardening, bảo mật, trải nghiệm lỗi,
 
 ## 5. Quản lý rủi ro lịch trình
 
-| Rủi ro | Biện pháp |
-|---|---|
-| Tích hợp OAuth/provider tốn thời gian hơn dự kiến | Spike sớm ở Sprint 0; dùng Google làm provider đầu tiên |
-| Làm một mình, thời gian không đều | Sprint Goal nhỏ, cắt scope thay vì kéo dài sprint |
-| Phạm vi trượt (scope creep) | Mọi ý tưởng mới vào backlog, không chèn giữa sprint |
-| Bỏ dở giữa chừng | Demo sớm, mỗi sprint đều có bản dùng được; Sprint 3 là mốc tối thiểu đã có giá trị |
+| Rủi ro                                            | Biện pháp                                                                          |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Tích hợp OAuth/provider tốn thời gian hơn dự kiến | Spike sớm ở Sprint 0; dùng Google làm provider đầu tiên                            |
+| Làm một mình, thời gian không đều                 | Sprint Goal nhỏ, cắt scope thay vì kéo dài sprint                                  |
+| Phạm vi trượt (scope creep)                       | Mọi ý tưởng mới vào backlog, không chèn giữa sprint                                |
+| Bỏ dở giữa chừng                                  | Demo sớm, mỗi sprint đều có bản dùng được; Sprint 3 là mốc tối thiểu đã có giá trị |
 
 ## 6. Kịch bản demo mẫu (dùng chung mỗi sprint)
 
 1. Khởi động môi trường từ trạng thái sạch.
 2. Chạy qua các story của sprint theo thứ tự.
 3. Ghi lại: cái gì chạy tốt, cái gì chưa, cái gì cần đưa vào sprint sau.
+

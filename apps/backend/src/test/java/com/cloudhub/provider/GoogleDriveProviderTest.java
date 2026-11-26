@@ -68,4 +68,22 @@ class GoogleDriveProviderTest {
             () -> GoogleDriveProvider.uploadBody(new ByteArrayInputStream(new byte[0]), -1)
         );
     }
+
+    @Test
+    void encodesDriveOrderByValuesForDescendingSorts() {
+        String[] sorts = {"name-desc", "size-desc", "modified-desc"};
+        String[] expectedQueries = {
+            "orderBy=folder%2Cname+desc",
+            "orderBy=folder%2CquotaBytesUsed+desc",
+            "orderBy=folder%2CmodifiedTime+desc"
+        };
+        for (int i = 0; i < sorts.length; i++) {
+            URI uri = URI.create(
+                "https://www.googleapis.com/drive/v3/files?orderBy="
+                    + GoogleDriveProvider.encodeOrder(sorts[i])
+            );
+
+            assertEquals(expectedQueries[i], uri.getRawQuery());
+        }
+    }
 }
