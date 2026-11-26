@@ -1,7 +1,6 @@
 package com.cloudhub;
 
 import java.net.URI;
-import java.util.Map;
 
 import com.cloudhub.provider.GoogleApiException;
 import org.springframework.http.HttpStatus;

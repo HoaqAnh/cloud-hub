@@ -336,7 +336,6 @@ public class DropboxProvider implements CloudProvider {
 
     @Override
     public FileItem rename(String accessToken, String fileId, String newName, String accountId) {
-        FileItem metadata = getMetadata(accessToken, fileId, accountId);
         String parent = parentPath(fileId);
         String to = parent.isEmpty() ? "/" + newName : parent + "/" + newName;
         JsonNode json = postRpcJson("/2/files/move_v2",
