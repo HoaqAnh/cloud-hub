@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -330,6 +331,97 @@ public class CloudController {
         CloudAccount account = ownedAccount(accountId, user);
         provider(account).trash(ensureAccessToken(account), fileId);
         return Map.of("trashed", true);
+    }
+
+    public record TransferRequest(
+        UUID sourceAccountId,
+        String sourceFileId,
+        UUID destinationAccountId,
+        String destinationFolderId,
+        String mode
+    ) {}
+
+    public record TransferResult(
+        FileItem copiedFile,
+        boolean moved,
+        String sourceFileId
+    ) {}
+
+    @PostMapping("/transfers")
+    @Transactional
+    public TransferResult transferFile(
+        @RequestBody TransferRequest request,
+        HttpSession session
+    ) throws IOException {
+        User user = currentUser(session);
+        if (request == null
+            || request.sourceAccountId() == null
+            || request.destinationAccountId() == null
+            || request.sourceFileId() == null
+            || request.sourceFileId().isBlank()) {
+            throw new IllegalArgumentException("Source and destination account/file are required");
+        }
+
+        CloudAccount sourceAccount = ownedAccount(request.sourceAccountId(), user);
+        CloudAccount destinationAccount = ownedAccount(request.destinationAccountId(), user);
+        if (sourceAccount.getId().equals(destinationAccount.getId())) {
+            throw new IllegalArgumentException("Cross-cloud transfer requires two different cloud accounts");
+        }
+        CloudProvider sourceProvider = provider(sourceAccount);
+        CloudProvider destinationProvider = provider(destinationAccount);
+
+        String sourceToken = ensureAccessToken(sourceAccount);
+        String destinationToken = ensureAccessToken(destinationAccount);
+        FileItem metadata = sourceProvider.getMetadata(
+            sourceToken, request.sourceFileId(), sourceAccount.getId().toString()
+        );
+        if (metadata.type().equals("FOLDER")) {
+            throw new IllegalArgumentException("Folder transfer is not supported; select a file");
+        }
+        if (metadata.shortcut()) {
+            throw new IllegalArgumentException("Shortcuts cannot be transferred");
+        }
+        if (!destinationProvider.capabilities().upload()) {
+            throw new IllegalArgumentException("Destination account does not support upload");
+        }
+
+        boolean move = "MOVE".equalsIgnoreCase(request.mode());
+        if (request.mode() != null
+            && !request.mode().isBlank()
+            && !move
+            && !"COPY".equalsIgnoreCase(request.mode())) {
+            throw new IllegalArgumentException("Transfer mode must be COPY or MOVE");
+        }
+
+        java.nio.file.Path temporaryFile = java.nio.file.Files.createTempFile("cloudhub-transfer-", null);
+        try {
+            DownloadStream download = sourceProvider.download(sourceToken, request.sourceFileId());
+            try (java.io.InputStream input = download.input();
+                 java.io.OutputStream output = java.nio.file.Files.newOutputStream(
+                     temporaryFile,
+                     java.nio.file.StandardOpenOption.TRUNCATE_EXISTING
+                 )) {
+                input.transferTo(output);
+            }
+            long size = java.nio.file.Files.size(temporaryFile);
+            try (java.io.InputStream uploadInput = java.nio.file.Files.newInputStream(temporaryFile)) {
+                FileItem copied = destinationProvider.upload(
+                    destinationToken,
+                    request.destinationFolderId(),
+                    download.filename(),
+                    download.mimeType(),
+                    uploadInput,
+                    size,
+                    destinationAccount.getId().toString()
+                );
+                if (move) {
+                    sourceProvider.trash(sourceToken, request.sourceFileId());
+                }
+                return new TransferResult(copied, move, request.sourceFileId());
+            }
+        } finally {
+            java.nio.file.Files.deleteIfExists(temporaryFile);
+        }
     }
 
     @DeleteMapping("/accounts/{accountId}")

@@ -252,7 +252,7 @@ public class OneDriveProvider implements CloudProvider {
             String itemPath = parentId == null || parentId.isBlank()
                 ? "/me/drive/root:/" + encodePath(safeName) + ":/content"
                 : "/me/drive/items/" + encodePath(parentId) + ":/" + encodePath(safeName) + ":/content";
-            JsonNode json;
+            JsonNode json = null;
             if (size <= 4 * 1024 * 1024) {
                 HttpRequest request = HttpRequest.newBuilder(URI.create("https://graph.microsoft.com/v1.0" + itemPath))
                     .header("Authorization", "Bearer " + accessToken)
@@ -298,10 +298,9 @@ public class OneDriveProvider implements CloudProvider {
                     offset += read;
                     if (offset == size) json = mapper.readTree(chunkResponse.body());
                 }
-                json = getJson(
-                    "https://graph.microsoft.com/v1.0/me/drive/root:/" + encodePath(safeName),
-                    accessToken
-                );
+            }
+            if (json == null) {
+                throw new IllegalStateException("OneDrive upload completed without returning file metadata");
             }
             return mapItem(json, accountId);
         } catch (GoogleApiException | IllegalArgumentException exception) {

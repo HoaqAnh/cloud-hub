@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
+  ArrowRightLeft,
   ChevronRight,
   Cloud,
+  Copy,
   Folder,
   Grid2X2,
   HardDrive,
@@ -38,6 +40,7 @@ type Account = {
 }
 type FileItem = {
   id: string
+  accountId?: string
   name: string
   type: 'FILE' | 'FOLDER'
   mimeType: string
@@ -59,6 +62,11 @@ type SearchGroup = {
   items: FileItem[]
   nextPageToken?: string
   error?: string
+}
+type TransferTarget = {
+  file: FileItem
+  mode: 'COPY' | 'MOVE'
+  sourceAccountId: string
 }
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
@@ -121,6 +129,10 @@ export default function App() {
   const [quota, setQuota] = useState<Record<string, StorageQuota>>({})
   const [providerFilter, setProviderFilter] = useState('all')
   const [searchGroups, setSearchGroups] = useState<SearchGroup[]>([])
+  const [transferTarget, setTransferTarget] = useState<TransferTarget | null>(null)
+  const [transferDestinationAccount, setTransferDestinationAccount] = useState('')
+  const [transferDestinationFolder, setTransferDestinationFolder] = useState('')
+  const [transferring, setTransferring] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -211,7 +223,9 @@ export default function App() {
         `/api/search?${query}`
       )
       setSearchGroups(value.groups)
-      const allItems = value.groups.flatMap((group) => group.items)
+      const allItems = value.groups.flatMap((group) =>
+        group.items.map((item) => ({ ...item, accountId: group.accountId }))
+      )
       setFiles((current) => append ? [...current, ...allItems] : allItems)
       setNextPageToken('')
     } catch (reason) {
@@ -354,6 +368,40 @@ export default function App() {
       await loadFiles(selectedAccount, folderId)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not move item to trash')
+    }
+  }
+
+  function openTransfer(file: FileItem, mode: 'COPY' | 'MOVE', sourceAccountId: string) {
+    const destination = accounts.find((account) => account.id !== sourceAccountId)
+      ?? accounts.find((account) => account.id === sourceAccountId)
+    setTransferTarget({ file, mode, sourceAccountId })
+    setTransferDestinationAccount(destination?.id ?? '')
+    setTransferDestinationFolder('')
+  }
+
+  async function transferFile() {
+    if (!transferTarget || !transferDestinationAccount) return
+    setTransferring(true)
+    setError('')
+    try {
+      await api<{ copiedFile: FileItem; moved: boolean; sourceFileId: string }>('/api/transfers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceAccountId: transferTarget.sourceAccountId,
+          sourceFileId: transferTarget.file.id,
+          destinationAccountId: transferDestinationAccount,
+          destinationFolderId: transferDestinationFolder.trim() || null,
+          mode: transferTarget.mode,
+        }),
+      })
+      setTransferTarget(null)
+      setTransferDestinationFolder('')
+      await loadFiles(transferTarget.sourceAccountId, folderId)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not transfer file')
+    } finally {
+      setTransferring(false)
     }
   }
 
@@ -627,10 +675,10 @@ export default function App() {
 
             {view === 'list' ? (
               <div className="mt-4 overflow-hidden rounded-xl border border-slate-800">
-                <div className="grid grid-cols-[1fr_180px_140px_104px] border-b border-slate-800 bg-slate-900 px-4 py-3 text-xs uppercase tracking-wider text-slate-500"><span>Name</span><span>Modified</span><span>Size</span><span /></div>
+                <div className="grid grid-cols-[1fr_180px_140px_152px] border-b border-slate-800 bg-slate-900 px-4 py-3 text-xs uppercase tracking-wider text-slate-500"><span>Name</span><span>Modified</span><span>Size</span><span /></div>
                 {loading && <p className="p-8 text-center text-slate-400">Loading files...</p>}
                 {!loading && files.map(file => (
-                  <div key={file.id} className="grid w-full grid-cols-[1fr_180px_140px_104px] items-center border-b border-slate-800 px-4 py-3 text-sm last:border-0 hover:bg-slate-900">
+                  <div key={file.id} className="grid w-full grid-cols-[1fr_180px_140px_152px] items-center border-b border-slate-800 px-4 py-3 text-sm last:border-0 hover:bg-slate-900">
                     <button onClick={() => enterFolder(file)} className="flex items-center gap-3 text-left">
                       {file.shortcut ? <Link2 className="h-5 w-5 text-violet-400" /> : file.type === 'FOLDER' ? <Folder className="h-5 w-5 text-cyan-400" /> : <HardDrive className="h-5 w-5 text-slate-400" />}
                       <span className="truncate">{file.name}{file.nativeDoc ? ' (Google Doc)' : ''}</span>
@@ -638,6 +686,12 @@ export default function App() {
                     <span className="text-slate-400">{file.modifiedAt ? new Date(file.modifiedAt).toLocaleString() : '-'}</span>
                     <span className="text-slate-400">{formatSize(file.size)}</span>
                     <span className="flex justify-end gap-1">
+                      {file.type !== 'FOLDER' && !file.shortcut && (
+                        <>
+                          <button onClick={() => openTransfer(file, 'COPY', file.accountId ?? selectedAccount!)} disabled={selectedCapabilities(accounts, file.accountId ?? selectedAccount)?.download === false} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Copy ${file.name}`}><Copy className="h-4 w-4" /></button>
+                          <button onClick={() => openTransfer(file, 'MOVE', file.accountId ?? selectedAccount!)} disabled={selectedCapabilities(accounts, file.accountId ?? selectedAccount)?.download === false || selectedCapabilities(accounts, file.accountId ?? selectedAccount)?.trash === false} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Move ${file.name}`}><ArrowRightLeft className="h-4 w-4" /></button>
+                        </>
+                      )}
                       <button onClick={() => renameFile(file)} disabled={selectedCapabilities(accounts, selectedAccount)?.rename === false} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Rename ${file.name}`}><Pencil className="h-4 w-4" /></button>
                       <button onClick={() => trashFile(file)} disabled={selectedCapabilities(accounts, selectedAccount)?.trash === false} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Trash ${file.name}`}><Trash2 className="h-4 w-4" /></button>
                     </span>
@@ -668,6 +722,12 @@ export default function App() {
                       <p className="mt-2 text-xs text-slate-500">{formatSize(file.size)} · {file.modifiedAt ? new Date(file.modifiedAt).toLocaleDateString() : '-'}</p>
                     </button>
                     <div className="mt-2 flex justify-end gap-1">
+                      {file.type !== 'FOLDER' && !file.shortcut && (
+                        <>
+                          <button onClick={() => openTransfer(file, 'COPY', file.accountId ?? selectedAccount!)} disabled={selectedCapabilities(accounts, file.accountId ?? selectedAccount)?.download === false} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Copy ${file.name}`}><Copy className="h-4 w-4" /></button>
+                          <button onClick={() => openTransfer(file, 'MOVE', file.accountId ?? selectedAccount!)} disabled={selectedCapabilities(accounts, file.accountId ?? selectedAccount)?.download === false || selectedCapabilities(accounts, file.accountId ?? selectedAccount)?.trash === false} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Move ${file.name}`}><ArrowRightLeft className="h-4 w-4" /></button>
+                        </>
+                      )}
                       <button onClick={() => renameFile(file)} disabled={selectedCapabilities(accounts, selectedAccount)?.rename === false} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Rename ${file.name}`}><Pencil className="h-4 w-4" /></button>
                       <button onClick={() => trashFile(file)} disabled={selectedCapabilities(accounts, selectedAccount)?.trash === false} className="rounded p-2 text-slate-500 hover:bg-slate-800 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Trash ${file.name}`}><Trash2 className="h-4 w-4" /></button>
                     </div>
@@ -683,6 +743,51 @@ export default function App() {
           </div>
         )}
       </section>
+      {transferTarget && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/80 px-6" role="dialog" aria-modal="true" aria-label="Transfer file">
+          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-center gap-3">
+              {transferTarget.mode === 'COPY'
+                ? <Copy className="h-5 w-5 text-cyan-400" />
+                : <ArrowRightLeft className="h-5 w-5 text-amber-400" />}
+              <div>
+                <h2 className="font-semibold">{transferTarget.mode === 'COPY' ? 'Copy file' : 'Move file'}</h2>
+                <p className="mt-1 max-w-xs truncate text-sm text-slate-400">{transferTarget.file.name}</p>
+              </div>
+            </div>
+            <label className="mt-6 block text-sm">
+              Destination account
+              <select
+                value={transferDestinationAccount}
+                onChange={(event) => setTransferDestinationAccount(event.target.value)}
+                className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 outline-none focus:border-cyan-500"
+              >
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.displayName} ({providerLabel(account.provider)})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="mt-4 block text-sm">
+              Destination folder ID <span className="text-slate-500">(optional)</span>
+              <input
+                value={transferDestinationFolder}
+                onChange={(event) => setTransferDestinationFolder(event.target.value)}
+                placeholder="Leave empty for root"
+                className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 outline-none focus:border-cyan-500"
+              />
+            </label>
+            {error && <p className="mt-4 text-sm text-rose-400">{error}</p>}
+            <div className="mt-6 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setTransferTarget(null)} disabled={transferring}>Cancel</Button>
+              <Button onClick={transferFile} disabled={transferring || !transferDestinationAccount}>
+                {transferring ? 'Transferring...' : transferTarget.mode === 'COPY' ? 'Copy' : 'Move'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

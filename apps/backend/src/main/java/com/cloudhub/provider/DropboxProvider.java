@@ -245,7 +245,13 @@ public class DropboxProvider implements CloudProvider {
     public FileItem upload(String accessToken, String parentId, String name, String mimeType,
                            InputStream data, long size, String accountId) {
         String safeName = name == null || name.isBlank() ? "Untitled" : name;
-        String path = normalizePath(parentId);
+        String path = parentId == null || parentId.isBlank() ? "" : normalizePath(parentId);
+        if (parentId != null && parentId.startsWith("id:")) {
+            JsonNode metadata = postRpcJson("/2/files/get_metadata",
+                "{\"path\":\"" + escapeJson(parentId) + "\"}", accessToken);
+            String resolvedPath = metadata.path("path_display").asText("");
+            if (!resolvedPath.isBlank()) path = resolvedPath;
+        }
         path = path.isEmpty() ? "/" + safeName : path + "/" + safeName;
         try {
             JsonNode json;
