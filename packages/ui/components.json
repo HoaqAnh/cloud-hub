@@ -1,0 +1,21 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "../../apps/frontend/src/index.css",
+    "baseColor": "neutral",
+    "cssVariables": false,
+    "prefix": ""
+  },
+  "iconLibrary": "lucide",
+  "aliases": {
+    "components": "@cloudhub/ui/components",
+    "ui": "@cloudhub/ui/components/ui",
+    "utils": "@cloudhub/ui/lib/utils",
+    "lib": "@cloudhub/ui/lib",
+    "hooks": "@cloudhub/ui/hooks"
+  }
+}

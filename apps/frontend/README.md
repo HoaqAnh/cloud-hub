@@ -1,32 +1,53 @@
-# React + TypeScript + Vite
+# CloudHub frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+CloudHub's frontend is a React, TypeScript, Vite, and Tailwind CSS application. Shared UI primitives are installed from shadcn/ui into the monorepo's `packages/ui` workspace package.
 
-Currently, two official plugins are available:
+## Development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Run commands from the repository root:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```powershell
+pnpm --filter frontend dev
+pnpm --filter frontend lint
+pnpm --filter frontend test
+pnpm --filter frontend build
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+The Vite development server proxies `/api` requests to `http://localhost:8080`.
+
+## Structure
+
+```text
+apps/frontend/src/
+├── app/                    # Router, auth gate, and application shell
+├── features/
+│   ├── accounts/
+│   │   ├── api/             # Account and quota requests
+│   │   ├── hooks/           # Account query and mutations
+│   │   └── components/      # Dashboard and account cards
+│   ├── auth/                # Login/logout API, session hook, login screen
+│   └── explorer/            # File API, explorer state hook, file UI
+└── shared/                  # Locale state and small cross-feature helpers
+
+packages/
+├── api-client/              # Shared fetch client and typed API errors
+├── contracts/               # Shared frontend API/domain interfaces
+├── i18n/                    # English and Vietnamese dictionaries
+└── ui/                      # shadcn/ui components and Tailwind class helper
+```
+
+Feature-specific requests, state, and UI stay together under each feature's `api`, `hooks`, and `components` directories. Shared contracts, i18n, API transport, and shadcn/ui primitives live in workspace packages so other apps can reuse them.
+
+## UI components and styling
+
+Use the shadcn/ui CLI to add primitives to the shared package:
+
+```powershell
+pnpm dlx shadcn@latest add button -c packages/ui
+```
+
+Use Tailwind utility classes for all application styling. `src/index.css` only imports Tailwind and registers the shared UI package as a Tailwind source; do not add component stylesheets or handwritten CSS rules.
+
+## Localization
+
+The locale is selected from the browser on first visit, can be switched from the application header, and is persisted in local storage. Add translations to both dictionaries in `packages/i18n/src/index.ts`.

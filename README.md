@@ -45,6 +45,15 @@ Services:
 - Backend: http://localhost:8080
 - PostgreSQL: localhost:55432
 
+## Frontend workspace packages
+
+- `packages/ui`: shared shadcn/ui primitives, added with the shadcn CLI
+- `packages/contracts`: shared TypeScript API/domain interfaces
+- `packages/api-client`: cookie-aware API transport and typed errors
+- `packages/i18n`: English and Vietnamese translations
+
+Frontend features are organized under `apps/frontend/src/features/<feature>` with separate `api`, `hooks`, and `components` layers. See [the frontend README](apps/frontend/README.md) for the development commands and component conventions.
+
 ## Validate
 
 ```powershell
@@ -59,7 +68,7 @@ pnpm build
 ## Sprint 0 deliverables
 
 - Maven Spring Boot backend with Flyway and a public `/api/health` endpoint
-- Vite React TypeScript frontend with Tailwind, TanStack Query, and a health UI
+- Vite React TypeScript frontend with feature-based layers, shadcn/ui, Tailwind, and TanStack Query
 - PostgreSQL Docker Compose service
 - Initial database migration
 - Editor, environment, workspace, and ADR configuration

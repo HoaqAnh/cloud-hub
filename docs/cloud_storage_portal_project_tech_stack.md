@@ -35,6 +35,10 @@ cloud-storage-portal/
 │   ├── backend/            # Spring Boot (Maven hoặc Gradle)
 │   └── frontend/           # React + TS + Vite
 ├── packages/               # (tùy chọn) types/API client dùng chung
+│   ├── ui/                  # shadcn/ui primitives shared by frontend apps
+│   ├── contracts/           # Shared TypeScript interfaces and API types
+│   ├── api-client/          # Shared fetch client and API error handling
+│   └── i18n/                # Shared localization dictionaries
 ├── docs/                   # goals, tech stack, plan, specs, ADR
 ├── infra/
 │   └── docker-compose.yml  # PostgreSQL (+ pgAdmin tùy chọn)
@@ -46,6 +50,7 @@ cloud-storage-portal/
 - Công cụ quản lý workspace phía JS: **pnpm workspaces** (đủ dùng; chỉ thêm Turborepo/Nx nếu thấy cần).
 - Backend build bằng **Gradle hoặc Maven** nằm trong `apps/backend`, không cần trộn với pnpm.
 - Sinh API client cho frontend từ **OpenAPI** (springdoc-openapi → openapi-typescript hoặc orval) để đồng bộ kiểu dữ liệu.
+- Frontend apps dùng chung shadcn/ui primitives, contracts, API client và i18n từ các workspace package ở `packages/`.
 
 ## 4. Backend
 

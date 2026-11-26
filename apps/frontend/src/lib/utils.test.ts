@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cn } from './utils'
+import { cn } from '../../../../packages/ui/src/lib/utils'
 
 describe('cn', () => {
   it('merges Tailwind classes', () => {

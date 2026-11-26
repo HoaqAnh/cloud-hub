@@ -1,0 +1,9 @@
+{
+  "name": "cloudhub",
+  "private": true,
+  "scripts": {
+    "build": "pnpm --filter frontend build",
+    "lint": "pnpm --filter frontend lint",
+    "test": "pnpm --filter frontend test"
+  }
+}
