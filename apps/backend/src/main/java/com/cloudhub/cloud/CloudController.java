@@ -2,6 +2,10 @@ package com.cloudhub.cloud;
 
 import jakarta.servlet.http.HttpSession;
 
+import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -13,14 +17,11 @@ import com.cloudhub.auth.AuthController;
 import com.cloudhub.auth.User;
 import com.cloudhub.auth.UserRepository;
 import com.cloudhub.provider.FileItem;
-import com.cloudhub.provider.GoogleDriveProvider;
-import com.cloudhub.provider.DropboxProvider;
-import com.cloudhub.provider.OneDriveProvider;
 import com.cloudhub.provider.CloudProvider;
 import com.cloudhub.provider.ProviderType;
+import com.cloudhub.provider.ProviderRegistry;
 import com.cloudhub.provider.Page;
 import com.cloudhub.security.TokenCipher;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -37,43 +38,23 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.multipart.MultipartFile;
 import com.cloudhub.provider.DownloadStream;
-import java.util.ArrayList;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api")
 public class CloudController {
     private final CloudAccountRepository accounts;
     private final UserRepository users;
-    private final GoogleDriveProvider google;
-    private final DropboxProvider dropbox;
-    private final OneDriveProvider onedrive;
+    private final ProviderRegistry providers;
+    private final AccessTokenService accessTokens;
     private final TokenCipher cipher;
 
-    public CloudController(
-        CloudAccountRepository accounts,
-        UserRepository users,
-        GoogleDriveProvider google,
-        TokenCipher cipher
-    ) {
-        this(accounts, users, google, null, null, cipher);
-    }
-
-    @org.springframework.beans.factory.annotation.Autowired
-    public CloudController(
-        CloudAccountRepository accounts,
-        UserRepository users,
-        GoogleDriveProvider google,
-        DropboxProvider dropbox,
-        OneDriveProvider onedrive,
-        TokenCipher cipher
-    ) {
+    public CloudController(CloudAccountRepository accounts, UserRepository users, ProviderRegistry providers,
+                           AccessTokenService accessTokens,
+                           TokenCipher cipher) {
         this.accounts = accounts;
         this.users = users;
-        this.google = google;
-        this.dropbox = dropbox;
-        this.onedrive = onedrive;
+        this.providers = providers;
+        this.accessTokens = accessTokens;
         this.cipher = cipher;
     }
 
@@ -99,7 +80,6 @@ public class CloudController {
     }
 
     @GetMapping("/accounts/{accountId}/files")
-    @Transactional
     public Map<String, Object> listFiles(
         @PathVariable UUID accountId,
         @RequestParam(required = false) String folderId,
@@ -121,7 +101,6 @@ public class CloudController {
     }
 
     @GetMapping("/search")
-    @Transactional
     public Map<String, Object> searchFiles(
         @RequestParam String q,
         @RequestParam(required = false) String accountId,
@@ -195,7 +174,6 @@ public class CloudController {
     }
 
     @GetMapping("/accounts/{accountId}/quota")
-    @Transactional
     public com.cloudhub.provider.StorageQuota getQuota(
         @PathVariable UUID accountId,
         HttpSession session
@@ -206,7 +184,6 @@ public class CloudController {
     }
 
     @GetMapping("/accounts/{accountId}/files/{fileId}")
-    @Transactional
     public FileItem getFile(
         @PathVariable UUID accountId,
         @PathVariable String fileId,
@@ -218,7 +195,6 @@ public class CloudController {
     }
 
     @GetMapping("/accounts/{accountId}/files/{fileId}/content")
-    @Transactional
     public ResponseEntity<StreamingResponseBody> downloadFile(
         @PathVariable UUID accountId,
         @PathVariable String fileId,
@@ -248,7 +224,6 @@ public class CloudController {
     }
 
     @PostMapping("/accounts/{accountId}/files")
-    @Transactional
     public FileItem uploadFile(
         @PathVariable UUID accountId,
         @RequestParam(required = false) String parentId,
@@ -270,7 +245,6 @@ public class CloudController {
     }
 
     @GetMapping("/accounts/{accountId}/files/{fileId}/thumbnail")
-    @Transactional
     public ResponseEntity<StreamingResponseBody> thumbnail(
         @PathVariable UUID accountId,
         @PathVariable String fileId,
@@ -293,7 +267,6 @@ public class CloudController {
     }
 
     @PostMapping("/accounts/{accountId}/folders")
-    @Transactional
     public FileItem createFolder(
         @PathVariable UUID accountId,
         @RequestParam(required = false) String parentId,
@@ -308,7 +281,6 @@ public class CloudController {
     }
 
     @PatchMapping("/accounts/{accountId}/files/{fileId}")
-    @Transactional
     public FileItem renameFile(
         @PathVariable UUID accountId,
         @PathVariable String fileId,
@@ -321,7 +293,6 @@ public class CloudController {
     }
 
     @DeleteMapping("/accounts/{accountId}/files/{fileId}")
-    @Transactional
     public Map<String, Boolean> trashFile(
         @PathVariable UUID accountId,
         @PathVariable String fileId,
@@ -348,7 +319,6 @@ public class CloudController {
     ) {}
 
     @PostMapping("/transfers")
-    @Transactional
     public TransferResult transferFile(
         @RequestBody TransferRequest request,
         HttpSession session
@@ -425,7 +395,6 @@ public class CloudController {
     }
 
     @DeleteMapping("/accounts/{accountId}")
-    @Transactional
     public Map<String, Boolean> disconnect(
         @PathVariable UUID accountId,
         HttpSession session
@@ -453,10 +422,7 @@ public class CloudController {
     }
 
     private CloudProvider provider(CloudAccount account) {
-        if (account.getProvider() == ProviderType.DROPBOX && dropbox != null) return dropbox;
-        if (account.getProvider() == ProviderType.GOOGLE) return google;
-        if (account.getProvider() == ProviderType.ONEDRIVE && onedrive != null) return onedrive;
-        throw new IllegalStateException("Unsupported cloud provider");
+        return providers.get(account.getProvider());
     }
 
     private boolean containsProvider(String providers, ProviderType provider) {
@@ -467,30 +433,7 @@ public class CloudController {
     }
 
     private String ensureAccessToken(CloudAccount account) {
-        if (account.getExpiresAt() != null
-            && account.getExpiresAt().isAfter(java.time.Instant.now().plusSeconds(60))) {
-            return cipher.decrypt(account.getAccessTokenEnc());
-        }
-        if (account.getRefreshTokenEnc() == null) {
-            throw new IllegalStateException("Account needs reconnect");
-        }
-        String refreshToken = cipher.decrypt(account.getRefreshTokenEnc());
-        try {
-            com.cloudhub.provider.TokenSet refreshed = provider(account).refresh(refreshToken);
-            account.setTokens(
-                cipher.encrypt(refreshed.accessToken()),
-                refreshed.refreshToken() == null ? null : cipher.encrypt(refreshed.refreshToken()),
-                refreshed.expiresAt()
-            );
-            accounts.save(account);
-            return refreshed.accessToken();
-        } catch (com.cloudhub.provider.GoogleApiException exception) {
-            if (exception.statusCode() == 401) {
-                account.setStatus("NEEDS_RECONNECT");
-                accounts.save(account);
-            }
-            throw exception;
-        }
+        return accessTokens.accessToken(account.getId());
     }
 
     private User currentUser(HttpSession session) {
