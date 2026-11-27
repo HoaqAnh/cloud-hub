@@ -474,6 +474,13 @@ public class DropboxProvider implements CloudProvider {
         try {
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 400) {
+                if (response.statusCode() == 409 && request.uri().getPath().equals("/2/files/delete_v2")) {
+                    JsonNode error = mapper.readTree(response.body()).path("error");
+                    if (error.path(".tag").asText().equals("path_lookup")
+                        && error.path("path_lookup").path(".tag").asText().equals("not_found")) {
+                        throw new GoogleApiException(404, "Dropbox item not found");
+                    }
+                }
                 throw new GoogleApiException(response.statusCode(), "Dropbox API error " + response.statusCode());
             }
             if (response.body().isBlank()) return mapper.getNodeFactory().nullNode();

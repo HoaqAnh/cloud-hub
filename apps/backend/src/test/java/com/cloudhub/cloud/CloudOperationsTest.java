@@ -33,6 +33,7 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.server.ResponseStatusException;
 
 @SpringBootTest(properties = { "cloudhub.admin.username=admin", "cloudhub.admin.password=test-admin-password" })
 @ActiveProfiles("test")
@@ -45,6 +46,7 @@ class CloudOperationsTest {
     @Autowired OAuthStateService oauthStates;
     @Autowired AccessTokenService tokens;
     @Autowired TokenCipher cipher;
+    @Autowired MoveCompletionService moves;
     @MockitoSpyBean GoogleDriveProvider google;
 
     @Test
@@ -109,6 +111,19 @@ class CloudOperationsTest {
         assertThatThrownBy(() -> tokens.accessToken(account.getId()))
             .isInstanceOf(GoogleApiException.class).hasMessage("Account needs reconnect");
         assertThat(accounts.findById(account.getId()).orElseThrow().getStatus()).isEqualTo("NEEDS_RECONNECT");
+    }
+
+    @Test
+    void moveRetryChecksOwnershipAndReplaysOnlyTheSourceStep() {
+        User owner = user();
+        CloudAccount source = account(owner, "source-access", null, Instant.now().plusSeconds(3600));
+        UUID id = moves.rememberFailure(owner.getId(), source.getId(), "source-file");
+        org.mockito.Mockito.doNothing().when(google).trash("source-access", "source-file");
+
+        assertThatThrownBy(() -> moves.retry(id, user().getId())).isInstanceOf(ResponseStatusException.class);
+        moves.retry(id, owner.getId());
+        moves.retry(id, owner.getId());
+        verify(google).trash("source-access", "source-file");
     }
 
     private User user() {

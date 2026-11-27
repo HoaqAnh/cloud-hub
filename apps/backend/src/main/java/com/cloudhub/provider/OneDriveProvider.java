@@ -357,6 +357,7 @@ public class OneDriveProvider implements CloudProvider {
         try {
             HttpRequest request = HttpRequest.newBuilder(
                     URI.create("https://graph.microsoft.com/v1.0/me/drive/items/" + encodePath(fileId)))
+                .timeout(java.time.Duration.ofSeconds(8))
                 .header("Authorization", "Bearer " + accessToken)
                 .DELETE()
                 .build();

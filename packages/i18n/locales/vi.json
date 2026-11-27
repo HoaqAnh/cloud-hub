@@ -110,5 +110,8 @@
   "resultCount_one": "{{count}} kết quả",
   "parentFolder": "Về thư mục cha",
   "noSubfolders": "Không có thư mục con",
-  "moreFolders": "Tải thêm thư mục"
+  "moreFolders": "Tải thêm thư mục",
+  "partialMove": "Bản sao đã được tạo tại vị trí dưới đây. Tệp nguồn vẫn cần được đưa vào thùng rác.",
+  "retrySourceTrash": "Thử lại đưa tệp nguồn vào thùng rác",
+  "close": "Đóng"
 }

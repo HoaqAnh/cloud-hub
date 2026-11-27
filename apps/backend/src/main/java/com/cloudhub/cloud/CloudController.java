@@ -13,6 +13,7 @@ import com.cloudhub.auth.AuthController;
 import com.cloudhub.auth.User;
 import com.cloudhub.auth.UserRepository;
 import com.cloudhub.provider.FileItem;
+import com.cloudhub.provider.GoogleApiException;
 import com.cloudhub.provider.CloudProvider;
 import com.cloudhub.provider.ProviderType;
 import com.cloudhub.provider.ProviderRegistry;
@@ -43,16 +44,18 @@ public class CloudController {
     private final ProviderRegistry providers;
     private final AccessTokenService accessTokens;
     private final CloudSearchService search;
+    private final MoveCompletionService moves;
     private final TokenCipher cipher;
 
     public CloudController(CloudAccountRepository accounts, UserRepository users, ProviderRegistry providers,
-                           AccessTokenService accessTokens, CloudSearchService search,
+                           AccessTokenService accessTokens, CloudSearchService search, MoveCompletionService moves,
                            TokenCipher cipher) {
         this.accounts = accounts;
         this.users = users;
         this.providers = providers;
         this.accessTokens = accessTokens;
         this.search = search;
+        this.moves = moves;
         this.cipher = cipher;
     }
 
@@ -268,7 +271,8 @@ public class CloudController {
     public record TransferResult(
         FileItem copiedFile,
         boolean moved,
-        String sourceFileId
+        String sourceFileId,
+        UUID retryId
     ) {}
 
     @PostMapping("/transfers")
@@ -318,7 +322,7 @@ public class CloudController {
 
         java.nio.file.Path temporaryFile = java.nio.file.Files.createTempFile("cloudhub-transfer-", null);
         try {
-            DownloadStream download = sourceProvider.download(sourceToken, request.sourceFileId());
+            DownloadStream download = sourceProvider.download(sourceToken, metadata.id());
             try (java.io.InputStream input = download.input();
                  java.io.OutputStream output = java.nio.file.Files.newOutputStream(
                      temporaryFile,
@@ -338,13 +342,24 @@ public class CloudController {
                     destinationAccount.getId().toString()
                 );
                 if (move) {
-                    sourceProvider.trash(sourceToken, request.sourceFileId());
+                    try {
+                        sourceProvider.trash(sourceToken, metadata.id());
+                    } catch (GoogleApiException | IllegalStateException failure) {
+                        UUID retryId = moves.rememberFailure(user.getId(), sourceAccount.getId(), metadata.id());
+                        return new TransferResult(copied, false, request.sourceFileId(), retryId);
+                    }
                 }
-                return new TransferResult(copied, move, request.sourceFileId());
+                return new TransferResult(copied, move, request.sourceFileId(), null);
             }
         } finally {
             java.nio.file.Files.deleteIfExists(temporaryFile);
         }
+    }
+
+    @PostMapping("/transfers/{retryId}/retry-source")
+    public Map<String, Boolean> retryMove(@PathVariable UUID retryId, HttpSession session) {
+        moves.retry(retryId, currentUser(session).getId());
+        return Map.of("moved", true);
     }
 
     @DeleteMapping("/accounts/{accountId}")

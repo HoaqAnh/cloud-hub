@@ -110,5 +110,8 @@
   "resultCount_other": "{{count}} results",
   "parentFolder": "Back to parent",
   "noSubfolders": "No subfolders",
-  "moreFolders": "Load more folders"
+  "moreFolders": "Load more folders",
+  "partialMove": "The copy is in the destination below. The source still needs to be moved to trash.",
+  "retrySourceTrash": "Retry moving source to trash",
+  "close": "Close"
 }

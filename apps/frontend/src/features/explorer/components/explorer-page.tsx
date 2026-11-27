@@ -466,6 +466,8 @@ export function ExplorerPage({ accounts, accountsLoading, t }: ExplorerPageProps
         accounts={accounts}
         destinationAccount={state.transferDestinationAccount}
         transferring={state.transferring}
+        partialMove={state.partialMove}
+        error={state.transferError}
         t={t}
         onOpenChange={(open) => {
           if (!open && !state.transferring) state.setTransferTarget(null)

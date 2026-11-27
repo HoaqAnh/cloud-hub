@@ -33,6 +33,8 @@ export function useExplorer(accounts: Account[], t: Translate) {
   const [transferTarget, setTransferTarget] = useState<TransferTarget | null>(null)
   const [transferDestinationAccount, setTransferDestinationAccount] = useState('')
   const [transferring, setTransferring] = useState(false)
+  const [partialMove, setPartialMove] = useState<{ retryId: string; fileName: string } | null>(null)
+  const [transferError, setTransferError] = useState('')
   const requestId = useRef(0)
 
   const activeAccountId = useMemo(() => {
@@ -215,6 +217,8 @@ export function useExplorer(accounts: Account[], t: Translate) {
     const destination = accounts.find((account) =>
       account.id !== sourceAccountId && account.capabilities?.upload !== false,
     )
+    setPartialMove(null)
+    setTransferError('')
     setTransferTarget({ file, mode, sourceAccountId })
     setTransferDestinationAccount(destination?.id ?? '')
   }
@@ -222,19 +226,28 @@ export function useExplorer(accounts: Account[], t: Translate) {
   async function transferFile(destinationFolderId?: string) {
     if (!transferTarget || !transferDestinationAccount) return
     setTransferring(true)
-    setError('')
+    setTransferError('')
     try {
-      await explorerApi.transfer({
-        sourceAccountId: transferTarget.sourceAccountId,
-        sourceFileId: transferTarget.file.id,
-        destinationAccountId: transferDestinationAccount,
-        destinationFolderId: destinationFolderId ?? null,
-        mode: transferTarget.mode,
-      })
+      if (partialMove) {
+        await explorerApi.retryMove(partialMove.retryId)
+      } else {
+        const result = await explorerApi.transfer({
+          sourceAccountId: transferTarget.sourceAccountId,
+          sourceFileId: transferTarget.file.id,
+          destinationAccountId: transferDestinationAccount,
+          destinationFolderId: destinationFolderId ?? null,
+          mode: transferTarget.mode,
+        })
+        if (result.retryId) {
+          setPartialMove({ retryId: result.retryId, fileName: result.copiedFile.name })
+          return
+        }
+      }
+      setPartialMove(null)
       setTransferTarget(null)
       await loadFiles(activeAccountId ?? transferTarget.sourceAccountId, folderId)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not transfer file')
+      setTransferError(reason instanceof Error ? reason.message : t('error'))
     } finally {
       setTransferring(false)
     }
@@ -324,6 +337,8 @@ export function useExplorer(accounts: Account[], t: Translate) {
     transferDestinationAccount,
     setTransferDestinationAccount,
     transferring,
+    partialMove,
+    transferError,
     selectAccount,
     navigateFolder,
     navigateBreadcrumb,

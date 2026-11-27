@@ -37,6 +37,8 @@ describe('transfer destination', () => {
           accounts={accounts}
           destinationAccount={account}
           transferring={false}
+          partialMove={null}
+          error=""
           t={(key) => key}
           onOpenChange={() => {}}
           onDestinationAccountChange={() => {}}

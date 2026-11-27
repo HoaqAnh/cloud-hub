@@ -56,11 +56,14 @@ export const explorerApi = {
     destinationFolderId: string | null
     mode: 'COPY' | 'MOVE'
   }) =>
-    apiRequest<{ copiedFile: FileItem; moved: boolean; sourceFileId: string }>('/api/transfers', {
+    apiRequest<{ copiedFile: FileItem; moved: boolean; sourceFileId: string; retryId?: string | null }>('/api/transfers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }),
+
+  retryMove: (retryId: string) =>
+    apiRequest<{ moved: boolean }>(`/api/transfers/${encodeURIComponent(retryId)}/retry-source`, { method: 'POST' }),
 
   upload: async (
     accountId: string,

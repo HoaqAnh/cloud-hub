@@ -25,6 +25,8 @@ interface TransferDialogProps {
   accounts: Account[]
   destinationAccount: string
   transferring: boolean
+  partialMove: { fileName: string } | null
+  error: string
   t: Translate
   onOpenChange: (open: boolean) => void
   onDestinationAccountChange: (accountId: string) => void
@@ -36,6 +38,8 @@ export function TransferDialog({
   accounts,
   destinationAccount,
   transferring,
+  partialMove,
+  error,
   t,
   onOpenChange,
   onDestinationAccountChange,
@@ -63,7 +67,7 @@ export function TransferDialog({
         <div className="space-y-4 py-2">
           <label className="block space-y-2 text-sm font-medium">
             {t('destinationAccount')}
-            <Select disabled={transferring} value={destinationAccount} onValueChange={onDestinationAccountChange}>
+            <Select disabled={transferring || Boolean(partialMove)} value={destinationAccount} onValueChange={onDestinationAccountChange}>
               <SelectTrigger className="h-10 w-full border-slate-200 bg-white text-slate-800 focus-visible:border-violet-400 focus-visible:ring-violet-400">
                 <SelectValue placeholder={t('destinationAccount')} />
               </SelectTrigger>
@@ -88,6 +92,8 @@ export function TransferDialog({
             accountId={destinationAccount}
             mode={target.mode}
             pending={transferring}
+            partialMove={partialMove}
+            error={error}
             onCancel={() => onOpenChange(false)}
             onTransfer={onTransfer}
             t={t}
@@ -98,10 +104,12 @@ export function TransferDialog({
   )
 }
 
-function DestinationFolders({ accountId, mode, pending, onCancel, onTransfer, t }: {
+function DestinationFolders({ accountId, mode, pending, partialMove, error, onCancel, onTransfer, t }: {
   accountId: string
   mode: 'COPY' | 'MOVE'
   pending: boolean
+  partialMove: { fileName: string } | null
+  error: string
   onCancel: () => void
   onTransfer: (folderId?: string) => void
   t: Translate
@@ -111,7 +119,7 @@ function DestinationFolders({ accountId, mode, pending, onCancel, onTransfer, t 
   const folderPath = [t('root'), ...path.map((item) => item.name)].join(' / ')
   const folders = useInfiniteQuery({
     queryKey: ['transfer-folders', accountId, folder?.id],
-    enabled: Boolean(accountId),
+    enabled: Boolean(accountId) && !partialMove,
     initialPageParam: '',
     queryFn: ({ pageParam }) => explorerApi.listFiles(accountId, folder?.id, pageParam, 'folder', 'name'),
     getNextPageParam: (page) => page.nextPageToken || undefined,
@@ -120,7 +128,7 @@ function DestinationFolders({ accountId, mode, pending, onCancel, onTransfer, t 
 
   return (
     <>
-      {accountId && (
+      {accountId && !partialMove && (
         <div className="space-y-2 text-sm" aria-busy={folders.isFetching}>
           <p className="break-all">{t('destinationFolder')}: {folderPath}</p>
           {folder && (
@@ -149,11 +157,18 @@ function DestinationFolders({ accountId, mode, pending, onCancel, onTransfer, t 
           {!folders.isPending && !folders.isError && !items.length && !folders.hasNextPage && <p>{t('noSubfolders')}</p>}
         </div>
       )}
+      {partialMove && (
+        <div role="status" className="break-words text-sm">
+          <p>{t('partialMove')}</p>
+          <p>{folderPath} / {partialMove.fileName}</p>
+        </div>
+      )}
+      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <DialogFooter>
-        <Button type="button" variant="outline" disabled={pending} onClick={onCancel}>{t('cancel')}</Button>
+        <Button type="button" variant="outline" disabled={pending} onClick={onCancel}>{partialMove ? t('close') : t('cancel')}</Button>
         <Button type="button" disabled={pending || !accountId} onClick={() => onTransfer(folder?.id)}
           className="bg-violet-600 text-white hover:bg-violet-700">
-          {pending ? t('loading') : mode === 'COPY' ? t('copy') : t('move')}
+          {pending ? t('loading') : partialMove ? t('retrySourceTrash') : mode === 'COPY' ? t('copy') : t('move')}
         </Button>
       </DialogFooter>
     </>

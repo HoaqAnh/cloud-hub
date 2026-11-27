@@ -394,6 +394,7 @@ public class GoogleDriveProvider implements CloudProvider {
         try {
             HttpRequest request = HttpRequest.newBuilder(
                     URI.create("https://www.googleapis.com/drive/v3/files/" + encodePath(fileId)))
+                .timeout(java.time.Duration.ofSeconds(8))
                 .header("Authorization", "Bearer " + accessToken)
                 .header("Content-Type", "application/json")
                 .method("PATCH", HttpRequest.BodyPublishers.ofString("{\"trashed\":true}"))
