@@ -11,13 +11,13 @@ import {
 import { Link, useRouterState } from '@tanstack/react-router'
 import { Alert, AlertDescription, Avatar, AvatarFallback, Button, Separator } from '@cloudhub/ui'
 import type { AuthUser } from '@cloudhub/contracts'
-import type { Locale, TranslationKey } from '@cloudhub/i18n'
+import type { Locale, Translate } from '@cloudhub/i18n'
 import type { ReactNode } from 'react'
 
 interface AppLayoutProps {
   user: AuthUser
   locale: Locale
-  t: (key: TranslationKey) => string
+  t: Translate
   onChangeLocale: (locale: Locale) => void
   onLogout: () => void
   isLoggingOut: boolean

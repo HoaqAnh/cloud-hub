@@ -6,13 +6,13 @@ import type {
   SearchGroup,
   TransferTarget,
 } from '@cloudhub/contracts'
-import type { TranslationKey } from '@cloudhub/i18n'
+import type { Translate } from '@cloudhub/i18n'
 import { providerLabel } from '../../../shared/lib/format'
 import { explorerApi } from '../api/explorer-api'
 
 const selectedAccountStorageKey = 'cloudhub:selected-account'
 
-export function useExplorer(accounts: Account[], t: (key: TranslationKey) => string) {
+export function useExplorer(accounts: Account[], t: Translate) {
   const [selectedAccountId, setSelectedAccountId] = useState(
     () => window.localStorage.getItem(selectedAccountStorageKey),
   )

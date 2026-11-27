@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@cloudhub/ui'
 import type { Account, TransferTarget } from '@cloudhub/contracts'
-import type { TranslationKey } from '@cloudhub/i18n'
+import type { Translate } from '@cloudhub/i18n'
 import { providerLabel } from '../../../shared/lib/format'
 
 interface TransferDialogProps {
@@ -24,7 +24,7 @@ interface TransferDialogProps {
   destinationAccount: string
   destinationFolder: string
   transferring: boolean
-  t: (key: TranslationKey) => string
+  t: Translate
   onOpenChange: (open: boolean) => void
   onDestinationAccountChange: (accountId: string) => void
   onDestinationFolderChange: (folderId: string) => void

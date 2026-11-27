@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import type { Account, FileItem } from '@cloudhub/contracts'
 import { Alert, AlertDescription, Badge, Button, Card, Input, Progress, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@cloudhub/ui'
-import type { TranslationKey } from '@cloudhub/i18n'
+import type { Translate } from '@cloudhub/i18n'
 import { formatSize, providerLabel } from '../../../shared/lib/format'
 import { explorerApi } from '../api/explorer-api'
 import { useExplorer } from '../hooks/use-explorer'
@@ -30,7 +30,7 @@ import { TransferDialog } from './transfer-dialog'
 interface ExplorerPageProps {
   accounts: Account[]
   accountsLoading: boolean
-  t: (key: TranslationKey) => string
+  t: Translate
 }
 
 function FileIcon({ file, className }: { file: FileItem; className?: string }) {
@@ -41,7 +41,7 @@ function FileIcon({ file, className }: { file: FileItem; className?: string }) {
   return <File className={className} />
 }
 
-function FileName({ file, t }: { file: FileItem; t: (key: TranslationKey) => string }) {
+function FileName({ file, t }: { file: FileItem; t: Translate }) {
   const updated = file.modifiedAt ? new Date(file.modifiedAt).toLocaleDateString() : '—'
   return (
     <span className="min-w-0">
@@ -70,7 +70,7 @@ function FileActionProps(file: FileItem, state: ReturnType<typeof useExplorer>) 
 function FileRow({ file, state, t }: {
   file: FileItem
   state: ReturnType<typeof useExplorer>
-  t: (key: TranslationKey) => string
+  t: Translate
 }) {
   return (
     <div className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-100 px-4 py-3 last:border-0 hover:bg-slate-50/80 md:grid-cols-[minmax(0,1fr)_150px_100px_170px]">
@@ -96,7 +96,7 @@ function FileRow({ file, state, t }: {
 function FileCard({ file, state, t }: {
   file: FileItem
   state: ReturnType<typeof useExplorer>
-  t: (key: TranslationKey) => string
+  t: Translate
 }) {
   const accountId = file.accountId ?? state.activeAccountId
   const thumbnailUrl = file.thumbnailUrl && accountId
@@ -136,7 +136,7 @@ function EmptyState({
   hasAccount: boolean
   message: string
   onClearFilters?: () => void
-  t: (key: TranslationKey) => string
+  t: Translate
 }) {
   return (
     <div className="flex flex-col items-center px-6 py-16 text-center">
@@ -329,7 +329,7 @@ export function ExplorerPage({ accounts, accountsLoading, t }: ExplorerPageProps
                 <span className={group.status === 'error' ? 'text-xs text-rose-600' : 'text-xs text-violet-700'}>
                   {group.status === 'error'
                     ? group.error || t('error')
-                    : `${group.items.length} ${group.items.length === 1 ? t('result') : t('results')}`}
+                    : t('resultCount', { count: group.items.length })}
                 </span>
               </button>
             ))}

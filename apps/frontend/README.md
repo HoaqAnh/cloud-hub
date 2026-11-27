@@ -50,4 +50,4 @@ Use Tailwind utility classes for all application styling. `src/index.css` only i
 
 ## Localization
 
-The locale is selected from the browser on first visit, can be switched from the application header, and is persisted in local storage. Add translations to both dictionaries in `packages/i18n/src/index.ts`.
+The locale is selected from the browser on first visit, can be switched from the application header, and is persisted in local storage. Add translations to both locale files following the [translation guide](../../packages/i18n/README.md).

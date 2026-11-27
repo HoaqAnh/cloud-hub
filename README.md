@@ -50,7 +50,7 @@ Services:
 - `packages/ui`: shared shadcn/ui primitives, added with the shadcn CLI
 - `packages/contracts`: shared TypeScript API/domain interfaces
 - `packages/api-client`: cookie-aware API transport and typed errors
-- `packages/i18n`: English and Vietnamese translations
+- `packages/i18n`: [English and Vietnamese translations](packages/i18n/README.md)
 
 Frontend features are organized under `apps/frontend/src/features/<feature>` with separate `api`, `hooks`, and `components` layers. See [the frontend README](apps/frontend/README.md) for the development commands and component conventions.
 

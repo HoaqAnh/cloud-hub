@@ -1,11 +1,11 @@
 import { useNavigate } from '@tanstack/react-router'
 import type { Account } from '@cloudhub/contracts'
-import type { TranslationKey } from '@cloudhub/i18n'
+import type { Translate } from '@cloudhub/i18n'
 import { DashboardPage } from './dashboard-page'
 import { useAccounts } from '../hooks/use-accounts'
 
 interface DashboardRouteProps {
-  t: (key: TranslationKey) => string
+  t: Translate
 }
 
 export function DashboardRoute({ t }: DashboardRouteProps) {
