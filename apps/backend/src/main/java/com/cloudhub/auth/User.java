@@ -35,4 +35,5 @@ public class User {
     public UUID getId() { return id; }
     public String getUsername() { return username; }
     public String getPasswordHash() { return passwordHash; }
+    void changePasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
 }

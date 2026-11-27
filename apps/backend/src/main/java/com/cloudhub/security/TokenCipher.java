@@ -20,12 +20,10 @@ public class TokenCipher {
     private final SecureRandom random = new SecureRandom();
 
     public TokenCipher(@Value("${cloudhub.token-key:}") String configuredKey) {
-        String material = configuredKey.isBlank()
-            ? "cloudhub-local-development-key-change-me"
-            : configuredKey;
+        if (configuredKey.isBlank()) throw new IllegalStateException("Set CLOUDHUB_TOKEN_KEY before starting CloudHub");
         try {
             byte[] keyBytes = MessageDigest.getInstance("SHA-256").digest(
-                material.getBytes(StandardCharsets.UTF_8));
+                configuredKey.getBytes(StandardCharsets.UTF_8));
             this.key = new SecretKeySpec(keyBytes, "AES");
         } catch (Exception exception) {
             throw new IllegalStateException("Cannot initialize token cipher", exception);

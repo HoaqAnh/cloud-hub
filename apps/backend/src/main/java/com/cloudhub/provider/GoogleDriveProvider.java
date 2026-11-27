@@ -25,7 +25,7 @@ public class GoogleDriveProvider implements CloudProvider {
     private final String clientId;
     private final String clientSecret;
     private final URI redirectUri;
-    private final HttpClient http = HttpClient.newHttpClient();
+    private final HttpClient http = HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(3)).build();
     private final ObjectMapper mapper = new ObjectMapper();
 
     public GoogleDriveProvider(
@@ -201,6 +201,7 @@ public class GoogleDriveProvider implements CloudProvider {
 
     private JsonNode getJson(String url, String accessToken) {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+            .timeout(java.time.Duration.ofSeconds(8))
             .header("Authorization", "Bearer " + accessToken)
             .header("Accept", "application/json")
             .GET().build();
@@ -393,6 +394,7 @@ public class GoogleDriveProvider implements CloudProvider {
         try {
             HttpRequest request = HttpRequest.newBuilder(
                     URI.create("https://www.googleapis.com/drive/v3/files/" + encodePath(fileId)))
+                .timeout(java.time.Duration.ofSeconds(8))
                 .header("Authorization", "Bearer " + accessToken)
                 .header("Content-Type", "application/json")
                 .method("PATCH", HttpRequest.BodyPublishers.ofString("{\"trashed\":true}"))
@@ -488,6 +490,7 @@ public class GoogleDriveProvider implements CloudProvider {
 
     private JsonNode postForm(String url, String body) {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+            .timeout(java.time.Duration.ofSeconds(8))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .header("Accept", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body))

@@ -6,6 +6,8 @@ import java.io.InputStream;
 public interface CloudProvider {
     ProviderType type();
     Capabilities capabilities();
+    String createCodeVerifier();
+    String createCodeChallenge(String verifier);
     URI buildAuthorizationUrl(String state, String codeChallenge);
     TokenSet exchangeCode(String code, String codeVerifier);
     TokenSet refresh(String refreshToken);

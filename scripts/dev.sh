@@ -40,6 +40,7 @@ docker compose --env-file "$env_file" -f infra/docker-compose.yml up -d
 
 (
   cd "$root/apps/backend"
+  export SPRING_PROFILES_INCLUDE="${SPRING_PROFILES_INCLUDE:+$SPRING_PROFILES_INCLUDE,}local-http-log"
   exec bash ./mvnw spring-boot:run
 ) &
 backend_pid=$!
@@ -60,7 +61,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 printf 'Frontend: http://localhost:5173\n'
-printf 'Backend:  http://localhost:8080\n'
+printf 'Backend:  http://localhost:%s\n' "${SERVER_PORT:-8080}"
 printf 'Press Ctrl+C to stop the frontend and backend.\n'
 
 wait "$backend_pid" "$frontend_pid"

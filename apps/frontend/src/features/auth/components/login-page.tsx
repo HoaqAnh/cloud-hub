@@ -3,11 +3,11 @@ import { Cloud, LockKeyhole } from 'lucide-react'
 import type { ApiError } from '@cloudhub/api-client'
 import { Alert, AlertDescription, Button, Input } from '@cloudhub/ui'
 import heroImage from '../../../assets/hero.png'
-import type { Locale, TranslationKey } from '@cloudhub/i18n'
+import type { Locale, Translate } from '@cloudhub/i18n'
 
 interface LoginPageProps {
   locale: Locale
-  t: (key: TranslationKey) => string
+  t: Translate
   error: Error | null
   isLoading: boolean
   onLogin: (username: string, password: string) => void

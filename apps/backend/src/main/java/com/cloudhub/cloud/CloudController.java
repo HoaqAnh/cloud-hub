@@ -13,14 +13,12 @@ import com.cloudhub.auth.AuthController;
 import com.cloudhub.auth.User;
 import com.cloudhub.auth.UserRepository;
 import com.cloudhub.provider.FileItem;
-import com.cloudhub.provider.GoogleDriveProvider;
-import com.cloudhub.provider.DropboxProvider;
-import com.cloudhub.provider.OneDriveProvider;
+import com.cloudhub.provider.GoogleApiException;
 import com.cloudhub.provider.CloudProvider;
 import com.cloudhub.provider.ProviderType;
+import com.cloudhub.provider.ProviderRegistry;
 import com.cloudhub.provider.Page;
 import com.cloudhub.security.TokenCipher;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -37,43 +35,27 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.multipart.MultipartFile;
 import com.cloudhub.provider.DownloadStream;
-import java.util.ArrayList;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api")
 public class CloudController {
     private final CloudAccountRepository accounts;
     private final UserRepository users;
-    private final GoogleDriveProvider google;
-    private final DropboxProvider dropbox;
-    private final OneDriveProvider onedrive;
+    private final ProviderRegistry providers;
+    private final AccessTokenService accessTokens;
+    private final CloudSearchService search;
+    private final MoveCompletionService moves;
     private final TokenCipher cipher;
 
-    public CloudController(
-        CloudAccountRepository accounts,
-        UserRepository users,
-        GoogleDriveProvider google,
-        TokenCipher cipher
-    ) {
-        this(accounts, users, google, null, null, cipher);
-    }
-
-    @org.springframework.beans.factory.annotation.Autowired
-    public CloudController(
-        CloudAccountRepository accounts,
-        UserRepository users,
-        GoogleDriveProvider google,
-        DropboxProvider dropbox,
-        OneDriveProvider onedrive,
-        TokenCipher cipher
-    ) {
+    public CloudController(CloudAccountRepository accounts, UserRepository users, ProviderRegistry providers,
+                           AccessTokenService accessTokens, CloudSearchService search, MoveCompletionService moves,
+                           TokenCipher cipher) {
         this.accounts = accounts;
         this.users = users;
-        this.google = google;
-        this.dropbox = dropbox;
-        this.onedrive = onedrive;
+        this.providers = providers;
+        this.accessTokens = accessTokens;
+        this.search = search;
+        this.moves = moves;
         this.cipher = cipher;
     }
 
@@ -99,7 +81,6 @@ public class CloudController {
     }
 
     @GetMapping("/accounts/{accountId}/files")
-    @Transactional
     public Map<String, Object> listFiles(
         @PathVariable UUID accountId,
         @RequestParam(required = false) String folderId,
@@ -121,7 +102,6 @@ public class CloudController {
     }
 
     @GetMapping("/search")
-    @Transactional
     public Map<String, Object> searchFiles(
         @RequestParam String q,
         @RequestParam(required = false) String accountId,
@@ -133,16 +113,11 @@ public class CloudController {
         HttpSession session
     ) {
         User user = currentUser(session);
+        var options = new CloudSearchService.Options(q, folderId, pageToken, type, sort);
         if (accountId != null && !accountId.isBlank()) {
-            UUID id = UUID.fromString(accountId);
-            CloudAccount account = ownedAccount(id, user);
-            Page<FileItem> page = provider(account).search(
-                ensureAccessToken(account), q, folderId, pageToken, id.toString(), type, sort
-            );
-            return Map.of(
-                "items", page.items(),
-                "nextPageToken", page.nextPageToken() == null ? "" : page.nextPageToken()
-            );
+            CloudAccount account = ownedAccount(UUID.fromString(accountId), user);
+            Page<FileItem> page = search.searchAccount(account, options);
+            return Map.of("items", page.items(), "nextPageToken", page.nextPageToken() == null ? "" : page.nextPageToken());
         }
 
         List<CloudAccount> selected = accounts.findByUserId(user.getId()).stream()
@@ -151,51 +126,10 @@ public class CloudController {
             .filter(account -> account.getStatus().equals("ACTIVE"))
             .toList();
 
-        List<CompletableFuture<Map<String, Object>>> searches = new ArrayList<>();
-        for (CloudAccount account : selected) {
-            searches.add(CompletableFuture.supplyAsync(() -> {
-                try {
-                    Page<FileItem> page = provider(account).search(
-                        ensureAccessToken(account), q, folderId, pageToken,
-                        account.getId().toString(), type, sort
-                    );
-                    return Map.<String, Object>of(
-                        "accountId", account.getId().toString(),
-                        "accountName", account.getDisplayName() == null ? account.getProvider().name() : account.getDisplayName(),
-                        "provider", account.getProvider().name(),
-                        "status", "ok",
-                        "items", page.items(),
-                        "nextPageToken", page.nextPageToken() == null ? "" : page.nextPageToken()
-                    );
-                } catch (Exception exception) {
-                    String message = exception.getMessage() == null ? "Provider search failed" : exception.getMessage();
-                    return Map.<String, Object>of(
-                        "accountId", account.getId().toString(),
-                        "accountName", account.getDisplayName() == null ? account.getProvider().name() : account.getDisplayName(),
-                        "provider", account.getProvider().name(),
-                        "status", "error",
-                        "items", List.of(),
-                        "error", message
-                    );
-                }
-            }).completeOnTimeout(Map.of(
-                "accountId", account.getId().toString(),
-                "accountName", account.getDisplayName() == null ? account.getProvider().name() : account.getDisplayName(),
-                "provider", account.getProvider().name(),
-                "status", "error",
-                "items", List.of(),
-                "error", "Provider search timed out"
-            ), 10, TimeUnit.SECONDS));
-        }
-
-        List<Map<String, Object>> groups = searches.stream()
-            .map(CompletableFuture::join)
-            .toList();
-        return Map.of("q", q, "groups", groups);
+        return Map.of("q", q, "groups", search.searchAccounts(selected, options));
     }
 
     @GetMapping("/accounts/{accountId}/quota")
-    @Transactional
     public com.cloudhub.provider.StorageQuota getQuota(
         @PathVariable UUID accountId,
         HttpSession session
@@ -206,7 +140,6 @@ public class CloudController {
     }
 
     @GetMapping("/accounts/{accountId}/files/{fileId}")
-    @Transactional
     public FileItem getFile(
         @PathVariable UUID accountId,
         @PathVariable String fileId,
@@ -218,7 +151,6 @@ public class CloudController {
     }
 
     @GetMapping("/accounts/{accountId}/files/{fileId}/content")
-    @Transactional
     public ResponseEntity<StreamingResponseBody> downloadFile(
         @PathVariable UUID accountId,
         @PathVariable String fileId,
@@ -248,7 +180,6 @@ public class CloudController {
     }
 
     @PostMapping("/accounts/{accountId}/files")
-    @Transactional
     public FileItem uploadFile(
         @PathVariable UUID accountId,
         @RequestParam(required = false) String parentId,
@@ -270,7 +201,6 @@ public class CloudController {
     }
 
     @GetMapping("/accounts/{accountId}/files/{fileId}/thumbnail")
-    @Transactional
     public ResponseEntity<StreamingResponseBody> thumbnail(
         @PathVariable UUID accountId,
         @PathVariable String fileId,
@@ -293,7 +223,6 @@ public class CloudController {
     }
 
     @PostMapping("/accounts/{accountId}/folders")
-    @Transactional
     public FileItem createFolder(
         @PathVariable UUID accountId,
         @RequestParam(required = false) String parentId,
@@ -308,7 +237,6 @@ public class CloudController {
     }
 
     @PatchMapping("/accounts/{accountId}/files/{fileId}")
-    @Transactional
     public FileItem renameFile(
         @PathVariable UUID accountId,
         @PathVariable String fileId,
@@ -321,7 +249,6 @@ public class CloudController {
     }
 
     @DeleteMapping("/accounts/{accountId}/files/{fileId}")
-    @Transactional
     public Map<String, Boolean> trashFile(
         @PathVariable UUID accountId,
         @PathVariable String fileId,
@@ -344,11 +271,11 @@ public class CloudController {
     public record TransferResult(
         FileItem copiedFile,
         boolean moved,
-        String sourceFileId
+        String sourceFileId,
+        UUID retryId
     ) {}
 
     @PostMapping("/transfers")
-    @Transactional
     public TransferResult transferFile(
         @RequestBody TransferRequest request,
         HttpSession session
@@ -395,7 +322,7 @@ public class CloudController {
 
         java.nio.file.Path temporaryFile = java.nio.file.Files.createTempFile("cloudhub-transfer-", null);
         try {
-            DownloadStream download = sourceProvider.download(sourceToken, request.sourceFileId());
+            DownloadStream download = sourceProvider.download(sourceToken, metadata.id());
             try (java.io.InputStream input = download.input();
                  java.io.OutputStream output = java.nio.file.Files.newOutputStream(
                      temporaryFile,
@@ -415,17 +342,27 @@ public class CloudController {
                     destinationAccount.getId().toString()
                 );
                 if (move) {
-                    sourceProvider.trash(sourceToken, request.sourceFileId());
+                    try {
+                        sourceProvider.trash(sourceToken, metadata.id());
+                    } catch (GoogleApiException | IllegalStateException failure) {
+                        UUID retryId = moves.rememberFailure(user.getId(), sourceAccount.getId(), metadata.id());
+                        return new TransferResult(copied, false, request.sourceFileId(), retryId);
+                    }
                 }
-                return new TransferResult(copied, move, request.sourceFileId());
+                return new TransferResult(copied, move, request.sourceFileId(), null);
             }
         } finally {
             java.nio.file.Files.deleteIfExists(temporaryFile);
         }
     }
 
+    @PostMapping("/transfers/{retryId}/retry-source")
+    public Map<String, Boolean> retryMove(@PathVariable UUID retryId, HttpSession session) {
+        moves.retry(retryId, currentUser(session).getId());
+        return Map.of("moved", true);
+    }
+
     @DeleteMapping("/accounts/{accountId}")
-    @Transactional
     public Map<String, Boolean> disconnect(
         @PathVariable UUID accountId,
         HttpSession session
@@ -453,10 +390,7 @@ public class CloudController {
     }
 
     private CloudProvider provider(CloudAccount account) {
-        if (account.getProvider() == ProviderType.DROPBOX && dropbox != null) return dropbox;
-        if (account.getProvider() == ProviderType.GOOGLE) return google;
-        if (account.getProvider() == ProviderType.ONEDRIVE && onedrive != null) return onedrive;
-        throw new IllegalStateException("Unsupported cloud provider");
+        return providers.get(account.getProvider());
     }
 
     private boolean containsProvider(String providers, ProviderType provider) {
@@ -467,30 +401,7 @@ public class CloudController {
     }
 
     private String ensureAccessToken(CloudAccount account) {
-        if (account.getExpiresAt() != null
-            && account.getExpiresAt().isAfter(java.time.Instant.now().plusSeconds(60))) {
-            return cipher.decrypt(account.getAccessTokenEnc());
-        }
-        if (account.getRefreshTokenEnc() == null) {
-            throw new IllegalStateException("Account needs reconnect");
-        }
-        String refreshToken = cipher.decrypt(account.getRefreshTokenEnc());
-        try {
-            com.cloudhub.provider.TokenSet refreshed = provider(account).refresh(refreshToken);
-            account.setTokens(
-                cipher.encrypt(refreshed.accessToken()),
-                refreshed.refreshToken() == null ? null : cipher.encrypt(refreshed.refreshToken()),
-                refreshed.expiresAt()
-            );
-            accounts.save(account);
-            return refreshed.accessToken();
-        } catch (com.cloudhub.provider.GoogleApiException exception) {
-            if (exception.statusCode() == 401) {
-                account.setStatus("NEEDS_RECONNECT");
-                accounts.save(account);
-            }
-            throw exception;
-        }
+        return accessTokens.accessToken(account.getId());
     }
 
     private User currentUser(HttpSession session) {

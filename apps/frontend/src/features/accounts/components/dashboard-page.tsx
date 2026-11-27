@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { Alert, AlertDescription, Badge, Button, Card, CardContent, CardHeader, CardTitle, Progress } from '@cloudhub/ui'
 import type { Account, StorageQuota } from '@cloudhub/contracts'
-import type { TranslationKey } from '@cloudhub/i18n'
+import type { Translate } from '@cloudhub/i18n'
 import { formatSize, providerLabel } from '../../../shared/lib/format'
 
 interface DashboardPageProps {
@@ -19,7 +19,7 @@ interface DashboardPageProps {
   quotaErrors: Record<string, string>
   isLoading: boolean
   error: Error | null
-  t: (key: TranslationKey) => string
+  t: Translate
   onRefresh: () => void
   onDisconnect: (account: Account) => void
   onBrowse: (account: Account) => void

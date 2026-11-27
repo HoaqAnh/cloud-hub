@@ -17,9 +17,11 @@
     "@cloudhub/ui": "workspace:*",
     "@tanstack/react-query": "^5.108.4",
     "@tanstack/react-router": "^1.170.46",
+    "i18next": "^27.2.9",
     "lucide-react": "^1.78.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "react-i18next": "^18.0.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.5",

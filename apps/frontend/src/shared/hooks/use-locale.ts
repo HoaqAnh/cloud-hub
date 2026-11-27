@@ -1,27 +1,16 @@
-import { useContext, useState } from 'react'
-import { detectLocale, translate, type Locale, type TranslationKey } from '@cloudhub/i18n'
-import { LocaleContext } from '../i18n/locale-context'
-
-const localeStorageKey = 'cloudhub:locale'
+import { useTranslation } from 'react-i18next'
+import type { Locale, Translate } from '@cloudhub/i18n'
+import { localeStorageKey } from '../i18n/i18n'
 
 export function useLocale() {
-  const context = useContext(LocaleContext)
-  const [locale, setLocaleState] = useState<Locale>(() => {
-    const stored = window.localStorage.getItem(localeStorageKey)
-    const detected = stored === 'en' || stored === 'vi' ? stored : detectLocale()
-    document.documentElement.lang = detected
-    return detected
-  })
+  const { i18n, t: translate } = useTranslation()
+  const locale: Locale = i18n.resolvedLanguage === 'vi' ? 'vi' : 'en'
 
   function setLocale(nextLocale: Locale) {
     window.localStorage.setItem(localeStorageKey, nextLocale)
-    document.documentElement.lang = nextLocale
-    setLocaleState(nextLocale)
+    void i18n.changeLanguage(nextLocale)
   }
 
-  function t(key: TranslationKey) {
-    return translate(locale, key)
-  }
-
-  return context ?? { locale, setLocale, t }
+  const t: Translate = (key, options) => translate(key, options ?? {})
+  return { locale, setLocale, t }
 }

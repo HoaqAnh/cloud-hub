@@ -26,9 +26,17 @@ public class AdminUserInitializer implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        if (users.findByUsername(username).isEmpty()) {
-            String hash = new BCryptPasswordEncoder().encode(password);
-            users.save(new User(UUID.randomUUID(), username, hash));
+        if (password.isBlank()) throw new IllegalStateException("Set CLOUDHUB_ADMIN_PASSWORD before starting CloudHub");
+        var encoder = new BCryptPasswordEncoder();
+        var existing = users.findByUsername(username);
+        if (existing.isEmpty()) {
+            users.save(new User(UUID.randomUUID(), username, encoder.encode(password)));
+        } else {
+            User admin = existing.get();
+            if (!encoder.matches(password, admin.getPasswordHash())) {
+                admin.changePasswordHash(encoder.encode(password));
+                users.save(admin);
+            }
         }
     }
 }

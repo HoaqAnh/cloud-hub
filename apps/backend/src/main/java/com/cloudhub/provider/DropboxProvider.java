@@ -27,7 +27,7 @@ public class DropboxProvider implements CloudProvider {
     private final String clientId;
     private final String clientSecret;
     private final URI redirectUri;
-    private final HttpClient http = HttpClient.newHttpClient();
+    private final HttpClient http = HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(3)).build();
     private final ObjectMapper mapper = new ObjectMapper();
 
     public DropboxProvider(
@@ -448,6 +448,7 @@ public class DropboxProvider implements CloudProvider {
 
     private JsonNode postRpcJson(String endpoint, String body, String accessToken) {
         HttpRequest request = HttpRequest.newBuilder(URI.create("https://api.dropboxapi.com" + endpoint))
+            .timeout(java.time.Duration.ofSeconds(8))
             .header("Authorization", "Bearer " + accessToken)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -461,6 +462,7 @@ public class DropboxProvider implements CloudProvider {
 
     private JsonNode postForm(String url, String body) {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+            .timeout(java.time.Duration.ofSeconds(8))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .header("Accept", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -472,6 +474,13 @@ public class DropboxProvider implements CloudProvider {
         try {
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 400) {
+                if (response.statusCode() == 409 && request.uri().getPath().equals("/2/files/delete_v2")) {
+                    JsonNode error = mapper.readTree(response.body()).path("error");
+                    if (error.path(".tag").asText().equals("path_lookup")
+                        && error.path("path_lookup").path(".tag").asText().equals("not_found")) {
+                        throw new GoogleApiException(404, "Dropbox item not found");
+                    }
+                }
                 throw new GoogleApiException(response.statusCode(), "Dropbox API error " + response.statusCode());
             }
             if (response.body().isBlank()) return mapper.getNodeFactory().nullNode();

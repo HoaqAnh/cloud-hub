@@ -1,12 +1,11 @@
 import { useEffect } from 'react'
 import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { Alert, AlertDescription, Button } from '@cloudhub/ui'
-import type { TranslationKey } from '@cloudhub/i18n'
+import type { Translate } from '@cloudhub/i18n'
 import { AppLayout } from './app-layout'
 import { useAuth } from '../features/auth/hooks/use-auth'
 import { LoginPage } from '../features/auth/components/login-page'
 import { useLocale } from '../shared/hooks/use-locale'
-import { LocaleProvider } from '../shared/providers/locale-provider'
 
 function LoadingPage({ label }: { label: string }) {
   return (
@@ -26,7 +25,7 @@ function AuthErrorPage({
 }: {
   error: Error
   onRetry: () => void
-  t: (key: TranslationKey) => string
+  t: Translate
 }) {
   return (
     <main className="grid min-h-screen place-items-center bg-[#f7f7fb] px-6">
@@ -63,32 +62,28 @@ export function AppRoot() {
   }
   if (!auth.user?.authenticated) {
     return (
-      <LocaleProvider value={locale}>
-        <LoginPage
-          locale={locale.locale}
-          t={locale.t}
-          error={auth.loginError}
-          isLoading={auth.isLoggingIn}
-          onLogin={(username, password) => auth.login({ username, password })}
-        />
-      </LocaleProvider>
+      <LoginPage
+        locale={locale.locale}
+        t={locale.t}
+        error={auth.loginError}
+        isLoading={auth.isLoggingIn}
+        onLogin={(username, password) => auth.login({ username, password })}
+      />
     )
   }
   if (pathname === '/login') return <LoadingPage label={locale.t('loadingCloudHub')} />
 
   return (
-    <LocaleProvider value={locale}>
-      <AppLayout
-        user={auth.user}
-        locale={locale.locale}
-        t={locale.t}
-        onChangeLocale={locale.setLocale}
-        onLogout={auth.logout}
-        isLoggingOut={auth.isLoggingOut}
-        logoutError={auth.logoutError}
-      >
-        <Outlet />
-      </AppLayout>
-    </LocaleProvider>
+    <AppLayout
+      user={auth.user}
+      locale={locale.locale}
+      t={locale.t}
+      onChangeLocale={locale.setLocale}
+      onLogout={auth.logout}
+      isLoggingOut={auth.isLoggingOut}
+      logoutError={auth.logoutError}
+    >
+      <Outlet />
+    </AppLayout>
   )
 }

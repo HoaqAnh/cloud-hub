@@ -1,11 +1,13 @@
 package com.cloudhub.auth;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,15 +28,22 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public Map<String, Object> login(@RequestBody LoginRequest request, HttpSession session) {
+    public Map<String, Object> login(@RequestBody LoginRequest request, HttpServletRequest servletRequest) {
         User user = users.findByUsername(request.username().trim())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials"));
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
         }
+        HttpSession session = servletRequest.getSession();
+        servletRequest.changeSessionId();
         session.setAttribute(SESSION_USER, user.getId().toString());
         session.setMaxInactiveInterval(24 * 60 * 60);
         return Map.of("authenticated", true, "username", user.getUsername());
+    }
+
+    @GetMapping("/csrf")
+    public Map<String, String> csrf(CsrfToken token) {
+        return Map.of("headerName", token.getHeaderName(), "token", token.getToken());
     }
 
     @PostMapping("/logout")

@@ -6,13 +6,13 @@ import type {
   SearchGroup,
   TransferTarget,
 } from '@cloudhub/contracts'
-import type { TranslationKey } from '@cloudhub/i18n'
+import type { Translate } from '@cloudhub/i18n'
 import { providerLabel } from '../../../shared/lib/format'
 import { explorerApi } from '../api/explorer-api'
 
 const selectedAccountStorageKey = 'cloudhub:selected-account'
 
-export function useExplorer(accounts: Account[], t: (key: TranslationKey) => string) {
+export function useExplorer(accounts: Account[], t: Translate) {
   const [selectedAccountId, setSelectedAccountId] = useState(
     () => window.localStorage.getItem(selectedAccountStorageKey),
   )
@@ -32,8 +32,9 @@ export function useExplorer(accounts: Account[], t: (key: TranslationKey) => str
   const [searchGroups, setSearchGroups] = useState<SearchGroup[]>([])
   const [transferTarget, setTransferTarget] = useState<TransferTarget | null>(null)
   const [transferDestinationAccount, setTransferDestinationAccount] = useState('')
-  const [transferDestinationFolder, setTransferDestinationFolder] = useState('')
   const [transferring, setTransferring] = useState(false)
+  const [partialMove, setPartialMove] = useState<{ retryId: string; fileName: string } | null>(null)
+  const [transferError, setTransferError] = useState('')
   const requestId = useRef(0)
 
   const activeAccountId = useMemo(() => {
@@ -213,30 +214,40 @@ export function useExplorer(accounts: Account[], t: (key: TranslationKey) => str
   function openTransfer(file: FileItem, mode: 'COPY' | 'MOVE') {
     const sourceAccountId = file.accountId ?? activeAccountId
     if (!sourceAccountId) return
-    const destination = accounts.find((account) => account.id !== sourceAccountId)
-      ?? accounts.find((account) => account.id === sourceAccountId)
+    const destination = accounts.find((account) =>
+      account.id !== sourceAccountId && account.capabilities?.upload !== false,
+    )
+    setPartialMove(null)
+    setTransferError('')
     setTransferTarget({ file, mode, sourceAccountId })
     setTransferDestinationAccount(destination?.id ?? '')
-    setTransferDestinationFolder('')
   }
 
-  async function transferFile() {
+  async function transferFile(destinationFolderId?: string) {
     if (!transferTarget || !transferDestinationAccount) return
     setTransferring(true)
-    setError('')
+    setTransferError('')
     try {
-      await explorerApi.transfer({
-        sourceAccountId: transferTarget.sourceAccountId,
-        sourceFileId: transferTarget.file.id,
-        destinationAccountId: transferDestinationAccount,
-        destinationFolderId: transferDestinationFolder.trim() || null,
-        mode: transferTarget.mode,
-      })
+      if (partialMove) {
+        await explorerApi.retryMove(partialMove.retryId)
+      } else {
+        const result = await explorerApi.transfer({
+          sourceAccountId: transferTarget.sourceAccountId,
+          sourceFileId: transferTarget.file.id,
+          destinationAccountId: transferDestinationAccount,
+          destinationFolderId: destinationFolderId ?? null,
+          mode: transferTarget.mode,
+        })
+        if (result.retryId) {
+          setPartialMove({ retryId: result.retryId, fileName: result.copiedFile.name })
+          return
+        }
+      }
+      setPartialMove(null)
       setTransferTarget(null)
-      setTransferDestinationFolder('')
       await loadFiles(activeAccountId ?? transferTarget.sourceAccountId, folderId)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not transfer file')
+      setTransferError(reason instanceof Error ? reason.message : t('error'))
     } finally {
       setTransferring(false)
     }
@@ -325,9 +336,9 @@ export function useExplorer(accounts: Account[], t: (key: TranslationKey) => str
     setTransferTarget,
     transferDestinationAccount,
     setTransferDestinationAccount,
-    transferDestinationFolder,
-    setTransferDestinationFolder,
     transferring,
+    partialMove,
+    transferError,
     selectAccount,
     navigateFolder,
     navigateBreadcrumb,
