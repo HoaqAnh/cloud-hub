@@ -2,10 +2,6 @@ package com.cloudhub.cloud;
 
 import jakarta.servlet.http.HttpSession;
 
-import java.util.ArrayList;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -46,15 +42,17 @@ public class CloudController {
     private final UserRepository users;
     private final ProviderRegistry providers;
     private final AccessTokenService accessTokens;
+    private final CloudSearchService search;
     private final TokenCipher cipher;
 
     public CloudController(CloudAccountRepository accounts, UserRepository users, ProviderRegistry providers,
-                           AccessTokenService accessTokens,
+                           AccessTokenService accessTokens, CloudSearchService search,
                            TokenCipher cipher) {
         this.accounts = accounts;
         this.users = users;
         this.providers = providers;
         this.accessTokens = accessTokens;
+        this.search = search;
         this.cipher = cipher;
     }
 
@@ -112,16 +110,11 @@ public class CloudController {
         HttpSession session
     ) {
         User user = currentUser(session);
+        var options = new CloudSearchService.Options(q, folderId, pageToken, type, sort);
         if (accountId != null && !accountId.isBlank()) {
-            UUID id = UUID.fromString(accountId);
-            CloudAccount account = ownedAccount(id, user);
-            Page<FileItem> page = provider(account).search(
-                ensureAccessToken(account), q, folderId, pageToken, id.toString(), type, sort
-            );
-            return Map.of(
-                "items", page.items(),
-                "nextPageToken", page.nextPageToken() == null ? "" : page.nextPageToken()
-            );
+            CloudAccount account = ownedAccount(UUID.fromString(accountId), user);
+            Page<FileItem> page = search.searchAccount(account, options);
+            return Map.of("items", page.items(), "nextPageToken", page.nextPageToken() == null ? "" : page.nextPageToken());
         }
 
         List<CloudAccount> selected = accounts.findByUserId(user.getId()).stream()
@@ -130,47 +123,7 @@ public class CloudController {
             .filter(account -> account.getStatus().equals("ACTIVE"))
             .toList();
 
-        List<CompletableFuture<Map<String, Object>>> searches = new ArrayList<>();
-        for (CloudAccount account : selected) {
-            searches.add(CompletableFuture.supplyAsync(() -> {
-                try {
-                    Page<FileItem> page = provider(account).search(
-                        ensureAccessToken(account), q, folderId, pageToken,
-                        account.getId().toString(), type, sort
-                    );
-                    return Map.<String, Object>of(
-                        "accountId", account.getId().toString(),
-                        "accountName", account.getDisplayName() == null ? account.getProvider().name() : account.getDisplayName(),
-                        "provider", account.getProvider().name(),
-                        "status", "ok",
-                        "items", page.items(),
-                        "nextPageToken", page.nextPageToken() == null ? "" : page.nextPageToken()
-                    );
-                } catch (Exception exception) {
-                    String message = exception.getMessage() == null ? "Provider search failed" : exception.getMessage();
-                    return Map.<String, Object>of(
-                        "accountId", account.getId().toString(),
-                        "accountName", account.getDisplayName() == null ? account.getProvider().name() : account.getDisplayName(),
-                        "provider", account.getProvider().name(),
-                        "status", "error",
-                        "items", List.of(),
-                        "error", message
-                    );
-                }
-            }).completeOnTimeout(Map.of(
-                "accountId", account.getId().toString(),
-                "accountName", account.getDisplayName() == null ? account.getProvider().name() : account.getDisplayName(),
-                "provider", account.getProvider().name(),
-                "status", "error",
-                "items", List.of(),
-                "error", "Provider search timed out"
-            ), 10, TimeUnit.SECONDS));
-        }
-
-        List<Map<String, Object>> groups = searches.stream()
-            .map(CompletableFuture::join)
-            .toList();
-        return Map.of("q", q, "groups", groups);
+        return Map.of("q", q, "groups", search.searchAccounts(selected, options));
     }
 
     @GetMapping("/accounts/{accountId}/quota")

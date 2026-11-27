@@ -27,7 +27,7 @@ public class DropboxProvider implements CloudProvider {
     private final String clientId;
     private final String clientSecret;
     private final URI redirectUri;
-    private final HttpClient http = HttpClient.newHttpClient();
+    private final HttpClient http = HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(3)).build();
     private final ObjectMapper mapper = new ObjectMapper();
 
     public DropboxProvider(
@@ -448,6 +448,7 @@ public class DropboxProvider implements CloudProvider {
 
     private JsonNode postRpcJson(String endpoint, String body, String accessToken) {
         HttpRequest request = HttpRequest.newBuilder(URI.create("https://api.dropboxapi.com" + endpoint))
+            .timeout(java.time.Duration.ofSeconds(8))
             .header("Authorization", "Bearer " + accessToken)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -461,6 +462,7 @@ public class DropboxProvider implements CloudProvider {
 
     private JsonNode postForm(String url, String body) {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+            .timeout(java.time.Duration.ofSeconds(8))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .header("Accept", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body))

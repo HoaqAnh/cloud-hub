@@ -28,6 +28,7 @@ public class OneDriveProvider implements CloudProvider {
     private final URI redirectUri;
     private final String tenant;
     private final HttpClient http = HttpClient.newBuilder()
+        .connectTimeout(java.time.Duration.ofSeconds(3))
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build();
     private final ObjectMapper mapper = new ObjectMapper();
@@ -446,6 +447,7 @@ public class OneDriveProvider implements CloudProvider {
 
     private JsonNode getJson(String url, String accessToken) {
         return sendJson(HttpRequest.newBuilder(URI.create(url))
+            .timeout(java.time.Duration.ofSeconds(8))
             .header("Authorization", "Bearer " + accessToken)
             .header("Accept", "application/json")
             .GET()
@@ -488,6 +490,7 @@ public class OneDriveProvider implements CloudProvider {
 
     private JsonNode postForm(String url, String body) {
         return sendJson(HttpRequest.newBuilder(URI.create(url))
+            .timeout(java.time.Duration.ofSeconds(8))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .header("Accept", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body))
