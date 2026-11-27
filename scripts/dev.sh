@@ -60,7 +60,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 printf 'Frontend: http://localhost:5173\n'
-printf 'Backend:  http://localhost:8080\n'
+printf 'Backend:  http://localhost:%s\n' "${SERVER_PORT:-8080}"
 printf 'Press Ctrl+C to stop the frontend and backend.\n'
 
 wait "$backend_pid" "$frontend_pid"

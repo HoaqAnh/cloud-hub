@@ -45,6 +45,10 @@ Services:
 - Backend: http://localhost:8080
 - PostgreSQL: localhost:55432
 
+## Backend restart during development
+
+Spring Boot DevTools restarts the backend when Java classes are compiled into `apps/backend/target/classes`. Enable build on save in your IDE, or run `bash ./mvnw compile` (`.\mvnw.cmd compile` on Windows) from `apps/backend` in a separate terminal. Vite and PostgreSQL stay running. After editing `.env` or changing dependencies, restart the affected process. The packaged backend excludes DevTools.
+
 ## Frontend workspace packages
 
 - `packages/ui`: shared shadcn/ui primitives, added with the shadcn CLI

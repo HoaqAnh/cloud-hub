@@ -39,4 +39,5 @@ Start-Process -FilePath $shell -ArgumentList '-NoExit', '-Command', "Set-Locatio
 Start-Process -FilePath $shell -ArgumentList '-NoExit', '-Command', "Set-Location -LiteralPath '$root\apps\frontend'; pnpm dev"
 
 Write-Host "Frontend: http://localhost:5173"
-Write-Host "Backend:  http://localhost:8080"
+$backendPort = if ($env:SERVER_PORT) { $env:SERVER_PORT } else { '8080' }
+Write-Host "Backend:  http://localhost:$backendPort"
