@@ -1,0 +1,76 @@
+name: Pull request checks
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: cloudhub
+          POSTGRES_USER: cloudhub
+          POSTGRES_PASSWORD: cloudhub
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U cloudhub -d cloudhub"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - run: bash ./mvnw --batch-mode --no-transfer-progress verify
+      - name: Check startup and Flyway on PostgreSQL
+        env:
+          CLOUDHUB_ADMIN_PASSWORD: ci-local-admin
+          CLOUDHUB_TOKEN_KEY: ci-local-token-key
+          SERVER_PORT: 8090
+          PGPASSWORD: cloudhub
+        shell: bash
+        run: |
+          java -jar target/backend-0.0.1-SNAPSHOT.jar > backend-ci.log 2>&1 &
+          backend_pid=$!
+          trap 'kill "$backend_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 2 http://127.0.0.1:8090/api/health | jq -e '.status == "UP"'; then
+              migration=$(psql -h 127.0.0.1 -p 55432 -U cloudhub -d cloudhub -Atc "select success from flyway_schema_history where version = '1'")
+              test "$migration" = t
+              exit
+            fi
+            if ! kill -0 "$backend_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          tail -80 backend-ci.log
+          exit 1

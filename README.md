@@ -6,8 +6,8 @@ CloudHub is a local multi-cloud file portal. Sprint 0 provides the monorepo, dat
 
 - Docker
 - JDK 21 or later
-- Node.js LTS
-- pnpm
+- Node.js 24 LTS
+- pnpm 11
 
 ## Start locally
 
