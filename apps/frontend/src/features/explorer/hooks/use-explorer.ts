@@ -32,7 +32,6 @@ export function useExplorer(accounts: Account[], t: Translate) {
   const [searchGroups, setSearchGroups] = useState<SearchGroup[]>([])
   const [transferTarget, setTransferTarget] = useState<TransferTarget | null>(null)
   const [transferDestinationAccount, setTransferDestinationAccount] = useState('')
-  const [transferDestinationFolder, setTransferDestinationFolder] = useState('')
   const [transferring, setTransferring] = useState(false)
   const requestId = useRef(0)
 
@@ -213,14 +212,14 @@ export function useExplorer(accounts: Account[], t: Translate) {
   function openTransfer(file: FileItem, mode: 'COPY' | 'MOVE') {
     const sourceAccountId = file.accountId ?? activeAccountId
     if (!sourceAccountId) return
-    const destination = accounts.find((account) => account.id !== sourceAccountId)
-      ?? accounts.find((account) => account.id === sourceAccountId)
+    const destination = accounts.find((account) =>
+      account.id !== sourceAccountId && account.capabilities?.upload !== false,
+    )
     setTransferTarget({ file, mode, sourceAccountId })
     setTransferDestinationAccount(destination?.id ?? '')
-    setTransferDestinationFolder('')
   }
 
-  async function transferFile() {
+  async function transferFile(destinationFolderId?: string) {
     if (!transferTarget || !transferDestinationAccount) return
     setTransferring(true)
     setError('')
@@ -229,11 +228,10 @@ export function useExplorer(accounts: Account[], t: Translate) {
         sourceAccountId: transferTarget.sourceAccountId,
         sourceFileId: transferTarget.file.id,
         destinationAccountId: transferDestinationAccount,
-        destinationFolderId: transferDestinationFolder.trim() || null,
+        destinationFolderId: destinationFolderId ?? null,
         mode: transferTarget.mode,
       })
       setTransferTarget(null)
-      setTransferDestinationFolder('')
       await loadFiles(activeAccountId ?? transferTarget.sourceAccountId, folderId)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not transfer file')
@@ -325,8 +323,6 @@ export function useExplorer(accounts: Account[], t: Translate) {
     setTransferTarget,
     transferDestinationAccount,
     setTransferDestinationAccount,
-    transferDestinationFolder,
-    setTransferDestinationFolder,
     transferring,
     selectAccount,
     navigateFolder,

@@ -94,7 +94,7 @@
   "cancel": "Hủy",
   "transferFile": "Chuyển tệp",
   "destinationAccount": "Tài khoản đích",
-  "destinationFolder": "ID thư mục đích",
+  "destinationFolder": "Thư mục đích",
   "optional": "không bắt buộc",
   "rootFolderHint": "Để trống để chọn thư mục gốc",
   "uploading": "Đang tải lên",
@@ -107,5 +107,8 @@
   "accountStatus": "Đã kết nối",
   "searchProviders": "Đang tìm kiếm...",
   "resultCount_other": "{{count}} kết quả",
-  "resultCount_one": "{{count}} kết quả"
+  "resultCount_one": "{{count}} kết quả",
+  "parentFolder": "Về thư mục cha",
+  "noSubfolders": "Không có thư mục con",
+  "moreFolders": "Tải thêm thư mục"
 }

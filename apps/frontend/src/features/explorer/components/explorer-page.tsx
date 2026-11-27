@@ -465,15 +465,13 @@ export function ExplorerPage({ accounts, accountsLoading, t }: ExplorerPageProps
         target={state.transferTarget}
         accounts={accounts}
         destinationAccount={state.transferDestinationAccount}
-        destinationFolder={state.transferDestinationFolder}
         transferring={state.transferring}
         t={t}
         onOpenChange={(open) => {
           if (!open && !state.transferring) state.setTransferTarget(null)
         }}
         onDestinationAccountChange={state.setTransferDestinationAccount}
-        onDestinationFolderChange={state.setTransferDestinationFolder}
-        onTransfer={() => void state.transferFile()}
+        onTransfer={(folderId) => void state.transferFile(folderId)}
       />
     </div>
   )

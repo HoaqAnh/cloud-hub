@@ -94,7 +94,7 @@
   "cancel": "Cancel",
   "transferFile": "Transfer file",
   "destinationAccount": "Destination account",
-  "destinationFolder": "Destination folder ID",
+  "destinationFolder": "Destination folder",
   "optional": "optional",
   "rootFolderHint": "Leave empty for root",
   "uploading": "Uploading",
@@ -107,5 +107,8 @@
   "accountStatus": "Connected",
   "searchProviders": "Searching providers...",
   "resultCount_one": "{{count}} result",
-  "resultCount_other": "{{count}} results"
+  "resultCount_other": "{{count}} results",
+  "parentFolder": "Back to parent",
+  "noSubfolders": "No subfolders",
+  "moreFolders": "Load more folders"
 }

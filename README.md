@@ -1,6 +1,6 @@
 # CloudHub
 
-CloudHub is a local multi-cloud file portal. Sprint 0 provides the monorepo, database, backend health endpoint, frontend health UI, and initial migrations.
+CloudHub is a local multi-cloud file portal. Explorer supports copying and moving individual files between connected accounts. Choose a destination account, then use its root folder or browse to a subfolder.
 
 ## Prerequisites
 
@@ -65,7 +65,7 @@ pnpm lint
 pnpm build
 ```
 
-## Sprint 0 deliverables
+## Development stack
 
 - Maven Spring Boot backend with Flyway and a public `/api/health` endpoint
 - Vite React TypeScript frontend with feature-based layers, shadcn/ui, Tailwind, and TanStack Query
