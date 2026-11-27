@@ -1,4 +1,4 @@
-import { ApiError, apiRequest } from '@cloudhub/api-client'
+import { ApiError, apiRequest, getCsrfToken } from '@cloudhub/api-client'
 import type { FileItem, SearchGroup } from '@cloudhub/contracts'
 
 export interface FilePage {
@@ -62,19 +62,21 @@ export const explorerApi = {
       body: JSON.stringify(payload),
     }),
 
-  upload: (
+  upload: async (
     accountId: string,
     folderId: string | undefined,
     file: File,
     onProgress: (progress: number) => void,
-  ) =>
-    new Promise<void>((resolve, reject) => {
+  ) => {
+    const csrf = await getCsrfToken()
+    return new Promise<void>((resolve, reject) => {
       const formData = new FormData()
       formData.append('file', file)
       const query = folderId ? `?parentId=${encodeURIComponent(folderId)}` : ''
       const request = new XMLHttpRequest()
       request.open('POST', `/api/accounts/${accountId}/files${query}`)
       request.withCredentials = true
+      request.setRequestHeader(csrf.headerName, csrf.token)
       request.upload.onprogress = (event) => {
         if (event.lengthComputable) {
           onProgress(Math.round((event.loaded / event.total) * 100))
@@ -101,7 +103,8 @@ export const explorerApi = {
       }
       request.onerror = () => reject(new Error('Network error while uploading'))
       request.send(formData)
-    }),
+    })
+  },
 
   contentUrl: (accountId: string, fileId: string, inline = false) =>
     `/api/accounts/${accountId}/files/${encodeURIComponent(fileId)}/content${inline ? '?disposition=inline' : ''}`,

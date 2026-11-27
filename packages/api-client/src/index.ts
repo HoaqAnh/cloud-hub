@@ -10,18 +10,26 @@ export class ApiError extends Error {
   }
 }
 
+export function getCsrfToken(signal?: AbortSignal | null) {
+  return apiRequest<{ headerName: string; token: string }>('/api/auth/csrf', { cache: 'no-store', signal })
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(path, {
-    credentials: 'include',
-    ...options,
-    headers: {
-      ...(options.body instanceof FormData ? {} : { Accept: 'application/json' }),
-      ...options.headers,
-    },
-  })
+  const headers = new Headers(options.headers)
+  if (!(options.body instanceof FormData) && !headers.has('Accept')) {
+    headers.set('Accept', 'application/json')
+  }
+
+  const method = (options.method ?? 'GET').toUpperCase()
+  if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+    const csrf = await getCsrfToken(options.signal)
+    headers.set(csrf.headerName, csrf.token)
+  }
+
+  const response = await fetch(path, { credentials: 'include', ...options, headers })
 
   if (!response.ok) {
     const body = await response.text()

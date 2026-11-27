@@ -5,7 +5,6 @@ import jakarta.servlet.http.HttpSession;
 
 import java.io.IOException;
 import java.security.SecureRandom;
-import java.time.Instant;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -29,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/oauth")
 public class OAuthController {
     private final OAuthStateRepository states;
+    private final OAuthStateService oauthStates;
     private final CloudAccountRepository accounts;
     private final UserRepository users;
     private final GoogleDriveProvider google;
@@ -38,17 +38,7 @@ public class OAuthController {
 
     public OAuthController(
         OAuthStateRepository states,
-        CloudAccountRepository accounts,
-        UserRepository users,
-        GoogleDriveProvider google,
-        TokenCipher cipher
-    ) {
-        this(states, accounts, users, google, null, null, cipher);
-    }
-
-    @org.springframework.beans.factory.annotation.Autowired
-    public OAuthController(
-        OAuthStateRepository states,
+        OAuthStateService oauthStates,
         CloudAccountRepository accounts,
         UserRepository users,
         GoogleDriveProvider google,
@@ -57,6 +47,7 @@ public class OAuthController {
         TokenCipher cipher
     ) {
         this.states = states;
+        this.oauthStates = oauthStates;
         this.accounts = accounts;
         this.users = users;
         this.google = google;
@@ -103,17 +94,9 @@ public class OAuthController {
         HttpSession session,
         HttpServletResponse response
     ) throws IOException {
-        OAuthState oauth = states.findById(state)
-            .orElseThrow(() -> new IllegalArgumentException("Invalid OAuth state"));
-        if (oauth.getExpiresAt().isBefore(Instant.now())) {
-            throw new IllegalArgumentException("OAuth state expired");
-        }
         User user = currentUser(session);
-        if (!oauth.getUser().getId().equals(user.getId())) {
-            throw new IllegalArgumentException("OAuth state belongs to another user");
-        }
-
-        TokenSet tokens = google.exchangeCode(code, oauth.getCodeVerifierEnc());
+        String verifier = oauthStates.consume(state, ProviderType.GOOGLE, user.getId());
+        TokenSet tokens = google.exchangeCode(code, verifier);
         AccountInfo info = google.getAccountInfo(tokens.accessToken());
         CloudAccount account = accounts
             .findByProviderAndExternalAccountId(ProviderType.GOOGLE, info.externalId())
@@ -125,7 +108,6 @@ public class OAuthController {
             tokens.expiresAt()
         );
         accounts.save(account);
-        states.delete(oauth);
         response.sendRedirect("http://localhost:5173/dashboard");
     }
 
@@ -137,17 +119,9 @@ public class OAuthController {
         HttpSession session,
         HttpServletResponse response
     ) throws IOException {
-        OAuthState oauth = states.findById(state)
-            .orElseThrow(() -> new IllegalArgumentException("Invalid OAuth state"));
-        if (oauth.getExpiresAt().isBefore(Instant.now())) {
-            throw new IllegalArgumentException("OAuth state expired");
-        }
         User user = currentUser(session);
-        if (!oauth.getUser().getId().equals(user.getId()) || oauth.getProvider() != ProviderType.DROPBOX) {
-            throw new IllegalArgumentException("OAuth state belongs to another user or provider");
-        }
-
-        TokenSet tokens = dropbox.exchangeCode(code, oauth.getCodeVerifierEnc());
+        String verifier = oauthStates.consume(state, ProviderType.DROPBOX, user.getId());
+        TokenSet tokens = dropbox.exchangeCode(code, verifier);
         AccountInfo info = dropbox.getAccountInfo(tokens.accessToken());
         CloudAccount account = accounts
             .findByProviderAndExternalAccountId(ProviderType.DROPBOX, info.externalId())
@@ -159,7 +133,6 @@ public class OAuthController {
             tokens.expiresAt()
         );
         accounts.save(account);
-        states.delete(oauth);
         response.sendRedirect("http://localhost:5173/dashboard");
     }
 
@@ -171,17 +144,9 @@ public class OAuthController {
         HttpSession session,
         HttpServletResponse response
     ) throws IOException {
-        OAuthState oauth = states.findById(state)
-            .orElseThrow(() -> new IllegalArgumentException("Invalid OAuth state"));
-        if (oauth.getExpiresAt().isBefore(Instant.now())) {
-            throw new IllegalArgumentException("OAuth state expired");
-        }
         User user = currentUser(session);
-        if (!oauth.getUser().getId().equals(user.getId()) || oauth.getProvider() != ProviderType.ONEDRIVE) {
-            throw new IllegalArgumentException("OAuth state belongs to another user or provider");
-        }
-
-        TokenSet tokens = onedrive.exchangeCode(code, oauth.getCodeVerifierEnc());
+        String verifier = oauthStates.consume(state, ProviderType.ONEDRIVE, user.getId());
+        TokenSet tokens = onedrive.exchangeCode(code, verifier);
         AccountInfo info = onedrive.getAccountInfo(tokens.accessToken());
         CloudAccount account = accounts
             .findByProviderAndExternalAccountId(ProviderType.ONEDRIVE, info.externalId())
@@ -193,7 +158,6 @@ public class OAuthController {
             tokens.expiresAt()
         );
         accounts.save(account);
-        states.delete(oauth);
         response.sendRedirect("http://localhost:5173/dashboard");
     }
 

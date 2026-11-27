@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-cloudhub}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cloudhub}
     ports:
-      - "55432:5432"
+      - "127.0.0.1:55432:5432"
     volumes:
       - cloudhub-postgres:/var/lib/postgresql/data
     healthcheck:

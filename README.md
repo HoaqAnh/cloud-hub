@@ -11,7 +11,7 @@ CloudHub is a local multi-cloud file portal. Sprint 0 provides the monorepo, dat
 
 ## Start locally
 
-Create `.env` from `.env.example` and fill in any local settings before starting.
+Create `.env` from `.env.example`. Set `CLOUDHUB_ADMIN_PASSWORD` to your local admin password and `CLOUDHUB_TOKEN_KEY` to a random secret (for example, generate one with `openssl rand -hex 32`). Keep the token key stable across restarts. On startup, the configured password sets or updates the configured local admin account. If upgrading from the old default token key, disconnect and reconnect existing cloud accounts after setting the new key. The backend and PostgreSQL bind to loopback.
 
 PowerShell:
 
