@@ -49,6 +49,10 @@ Services:
 
 Spring Boot DevTools restarts the backend when Java classes are compiled into `apps/backend/target/classes`. Enable build on save in your IDE, or run `bash ./mvnw compile` (`.\mvnw.cmd compile` on Windows) from `apps/backend` in a separate terminal. Vite and PostgreSQL stay running. After editing `.env` or changing dependencies, restart the affected process. The packaged backend excludes DevTools.
 
+## HTTP request logs
+
+The backend prints a request summary to stdout and returns an `X-Request-ID` response header. The dev scripts also write rotating logs to `apps/backend/logs/http.log`. Use `tail -f apps/backend/logs/http.log` on Bash or `Get-Content apps/backend/logs/http.log -Wait` on PowerShell. Search for the response ID to find the method, route, status, and duration. The summary excludes request and response content, query parameters, and credentials.
+
 ## Frontend workspace packages
 
 - `packages/ui`: shared shadcn/ui primitives, added with the shadcn CLI

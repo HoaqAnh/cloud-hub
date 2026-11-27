@@ -1,6 +1,7 @@
 package com.cloudhub;
 
 import com.cloudhub.auth.AuthController;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,6 +27,7 @@ public class SecurityConfig {
             .requestCache(cache -> cache.disable())
             .addFilterBefore(new SessionAuthenticationFilter(), AnonymousAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth
+                .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/health", "/actuator/health", "/api/auth/me", "/api/auth/csrf").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                 .requestMatchers("/api/**", "/actuator/**").authenticated()

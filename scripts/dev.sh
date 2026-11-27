@@ -40,6 +40,7 @@ docker compose --env-file "$env_file" -f infra/docker-compose.yml up -d
 
 (
   cd "$root/apps/backend"
+  export SPRING_PROFILES_INCLUDE="${SPRING_PROFILES_INCLUDE:+$SPRING_PROFILES_INCLUDE,}local-http-log"
   exec bash ./mvnw spring-boot:run
 ) &
 backend_pid=$!

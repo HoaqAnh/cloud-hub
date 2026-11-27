@@ -35,7 +35,13 @@ $shell = if ($PSVersionTable.PSEdition -eq 'Core') {
     Join-Path $PSHOME 'powershell.exe'
 }
 
-Start-Process -FilePath $shell -ArgumentList '-NoExit', '-Command', "Set-Location -LiteralPath '$root\apps\backend'; .\mvnw.cmd spring-boot:run"
+$previousProfiles = $env:SPRING_PROFILES_INCLUDE
+$env:SPRING_PROFILES_INCLUDE = (@($previousProfiles, 'local-http-log') | Where-Object { $_ }) -join ','
+try {
+    Start-Process -FilePath $shell -ArgumentList '-NoExit', '-Command', "Set-Location -LiteralPath '$root\apps\backend'; .\mvnw.cmd spring-boot:run"
+} finally {
+    $env:SPRING_PROFILES_INCLUDE = $previousProfiles
+}
 Start-Process -FilePath $shell -ArgumentList '-NoExit', '-Command', "Set-Location -LiteralPath '$root\apps\frontend'; pnpm dev"
 
 Write-Host "Frontend: http://localhost:5173"
